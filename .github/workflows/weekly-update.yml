@@ -1,7 +1,7 @@
 name: FPL weekly update
 
 on:
-  # Checks every morning at 08:00 UTC (9am UK in summer, 8am in winter).
+  # Runs daily. Checks every morning at 08:00 UTC (9am UK in summer, 8am in winter).
   # It only posts once a gameweek is fully finished (bonus points confirmed)
   # and hasn't been posted yet - so it posts once per gameweek, automatically.
   schedule:
