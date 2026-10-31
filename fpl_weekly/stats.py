@@ -31,6 +31,9 @@ class Section:
     paragraphs: list = field(default_factory=list)
     table: Table = None
     bullets: list = field(default_factory=list)
+    full_table: Table = None         # longer version for the web page
+    chart: list = None               # [(name, value, tag)] bars for the web page
+    chart_avg: float = None
 
 
 @dataclass
@@ -40,6 +43,7 @@ class Report:
     gameweek: int
     league_name: str
     sections: list
+    key_facts: list = field(default_factory=list)   # [(label, value)] for the Teams teaser
 
 
 @dataclass
@@ -125,9 +129,10 @@ def make_display_names(player_names, nicknames):
 # --- the report ----------------------------------------------------------------
 
 class ReportBuilder:
-    def __init__(self, client, config, gameweek=None):
+    def __init__(self, client, config, gameweek=None, extra_clients=None):
         self.client = client
         self.config = config
+        self.extra_clients = extra_clients or {}
         boot = client.bootstrap()
         self.events = {e["id"]: e for e in boot["events"]}
         self.gw = gameweek or latest_final_gameweek(boot["events"])
@@ -197,6 +202,8 @@ class ReportBuilder:
 
         sections = [self.week_section(), self.classic_section()]
         sections += [self.h2h_section(*h) for h in self.h2h]
+        sections += [self.extra_section(lg) for lg in self.config.get("extra_leagues", [])
+                     if lg.get("id")]
         self.collect_notes()
         sections.append(self.notes_section())
         sections = [s for s in sections if s and (s.paragraphs or s.table or s.bullets)]
@@ -207,6 +214,7 @@ class ReportBuilder:
             gameweek=gw,
             league_name=self.config.get("title") or self.league["name"],
             sections=sections,
+            key_facts=self.key_facts,
         )
 
     # -- headline --
@@ -259,6 +267,11 @@ class ReportBuilder:
             rows.append(["Most captained", f"{self.pname(fav)}, {n} of {len(self.caps)} "
                                            f"({fp} {plural(fp, 'pt', 'pts')})"])
         s.table = Table(None, rows, widths=["auto", "stretch"])
+        ranked = sorted(self.active, key=lambda m: (-m.net(gw), m.name))
+        s.chart = [(m.name, m.net(gw), "top" if m.net(gw) == self.top else
+                    "bottom" if m.net(gw) == self.bottom else "") for m in ranked]
+        s.chart_avg = self.league_avg
+        self.key_facts = rows[:2]
 
         avg = self.league_avg
         if self.top >= max(avg + 20, 75):
@@ -300,12 +313,19 @@ class ReportBuilder:
             rows.append([str(now[m.entry]), m.name, str(m.net(gw)),
                          str(m.history[gw]["total_points"]), movement(moves[m.entry])])
         s = Section(self.league["name"])
-        s.table = Table(["Pos", "Manager", "GW", "Total", "+/-"], rows,
-                        align=["left", "left", "right", "right", "right"],
-                        widths=["auto", "stretch", "auto", "auto", "auto"])
+        headers = ["Pos", "Manager", "GW", "Total", "+/-"]
+        align = ["left", "left", "right", "right", "right"]
+        s.table = Table(headers, rows, align=align, widths=["auto", "stretch", "auto", "auto", "auto"])
+        s.full_table = Table(["Pos", "Manager", "Team", "GW", "Total", "+/-"],
+                             [[str(now[m.entry]), m.name, m.team, str(m.net(gw)),
+                               str(m.history[gw]["total_points"]), movement(moves[m.entry])]
+                              for m in ordered],
+                             align=["left", "left", "left", "right", "right", "right"])
 
         # leader story
         leader = ordered[0]
+        self.key_facts.append(["Classic league leader",
+                               f"{leader.name} ({leader.history[gw]['total_points']})"])
         second = ordered[1] if len(ordered) > 1 else None
         gap = leader.history[gw]["total_points"] - (second.history[gw]["total_points"] if second else 0)
         prev_leaders = [e for e, r in prev.items() if r == 1]
@@ -477,6 +497,91 @@ class ReportBuilder:
                                               f"{who} loses again", who, label))
         return s
 
+    # -- other FPL games (Challenge, Draft) --
+    def other_name(self, full_name):
+        """Use the same display name as the main league when it's the same person."""
+        full_to_display = {m.player: m.name for m in self.managers}
+        full_name = (full_name or "").strip()
+        return full_to_display.get(full_name) or (full_name.split()[0] if full_name else "?")
+
+    def extra_section(self, lg):
+        try:
+            if lg["game"] == "challenge":
+                return self.challenge_section(lg)
+            if lg["game"] == "draft":
+                return self.draft_section(lg)
+        except Exception as e:  # one broken extra league shouldn't stop the update
+            print(f"WARNING: could not load {lg.get('label')} ({lg.get('game')} {lg.get('id')}): {e}")
+        return None
+
+    def challenge_section(self, lg):
+        client = self.extra_clients["challenge"]
+        league, rows = client.classic_standings(lg["id"])
+        if not rows:
+            return None
+        s = Section(lg.get("label") or league["name"])
+        table = []
+        for r in sorted(rows, key=lambda r: r["rank"]):
+            move = (r["last_rank"] - r["rank"]) if r.get("last_rank") else 0
+            table.append([str(r["rank"]), self.other_name(r["player_name"]),
+                          str(r.get("event_total", 0)), str(r["total"]), movement(move)])
+        s.table = Table(["Pos", "Manager", "Round", "Total", "+/-"], table,
+                        align=["left", "left", "right", "right", "right"],
+                        widths=["auto", "stretch", "auto", "auto", "auto"])
+        leader = min(rows, key=lambda r: r["rank"])
+        text = f"{self.other_name(leader['player_name'])} leads on {leader['total']} points."
+        best_round = max(r.get("event_total", 0) for r in rows)
+        if best_round > 0:
+            who = join_names(self.other_name(r["player_name"]) for r in rows
+                             if r.get("event_total", 0) == best_round)
+            text += f" {who} had the best round with {best_round}."
+        s.paragraphs.append(text)
+        return s
+
+    def draft_section(self, lg):
+        client = self.extra_clients["draft"]
+        data = client.draft_league(lg["id"])
+        league = data["league"]
+        entries = {e["id"]: self.other_name(f"{e.get('player_first_name', '')} {e.get('player_last_name', '')}")
+                   for e in data.get("league_entries", [])}
+        s = Section(lg.get("label") or league["name"])
+        standings = sorted(data.get("standings", []), key=lambda r: r["rank"])
+        matches = [m for m in data.get("matches", []) if m.get("finished")]
+        if league.get("scoring") == "h" and matches:
+            gw = max((m["event"] for m in matches if m["event"] <= self.gw), default=None)
+            results = []
+            for m in matches:
+                if m["event"] != gw:
+                    continue
+                n1, n2 = entries.get(m["league_entry_1"], "?"), entries.get(m["league_entry_2"], "?")
+                p1, p2 = m["league_entry_1_points"], m["league_entry_2_points"]
+                if p1 > p2:
+                    n1 = f"**{n1}**"
+                elif p2 > p1:
+                    n2 = f"**{n2}**"
+                results.append([n1, f"{p1}-{p2}", n2])
+            s.table = Table(["Home", "Score", "Away"], results,
+                            align=["right", "center", "left"], widths=["stretch", "auto", "stretch"])
+            if standings:
+                top = standings[0]
+                rec = (f"W{top['matches_won']} D{top['matches_drawn']} L{top['matches_lost']}"
+                       if top.get("matches_drawn") else f"W{top['matches_won']} L{top['matches_lost']}")
+                s.paragraphs.append(f"{entries.get(top['league_entry'], '?')} leads on "
+                                    f"{top['total']} points ({rec}).")
+            s.full_table = Table(["Pos", "Manager", "W", "D", "L", "Pts"],
+                                 [[str(r["rank"]), entries.get(r["league_entry"], "?"),
+                                   str(r.get("matches_won", 0)), str(r.get("matches_drawn", 0)),
+                                   str(r.get("matches_lost", 0)), str(r["total"])] for r in standings],
+                                 align=["left", "left", "right", "right", "right", "right"])
+        elif standings:
+            s.table = Table(["Pos", "Manager", "Total"],
+                            [[str(r["rank"]), entries.get(r["league_entry"], "?"), str(r["total"])]
+                             for r in standings],
+                            align=["left", "left", "right"], widths=["auto", "stretch", "auto"])
+            s.paragraphs.append(f"{entries.get(standings[0]['league_entry'], '?')} leads on "
+                                f"{standings[0]['total']} points.")
+        return s
+
     # -- also this week --
     def collect_notes(self):
         gw = self.gw
@@ -599,5 +704,8 @@ class ReportBuilder:
         return Section("Also this week", bullets=notes)
 
 
-def build_report(client, config, gameweek=None):
-    return ReportBuilder(client, config, gameweek).build()
+def build_report(client, config, gameweek=None, extra_clients=None):
+    if extra_clients is None:
+        from .api import CHALLENGE_URL, DRAFT_URL, FPLClient
+        extra_clients = {"challenge": FPLClient(CHALLENGE_URL), "draft": FPLClient(DRAFT_URL)}
+    return ReportBuilder(client, config, gameweek, extra_clients).build()

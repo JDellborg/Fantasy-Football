@@ -6,6 +6,8 @@ import urllib.error
 import urllib.request
 
 BASE_URL = "https://fantasy.premierleague.com/api"
+CHALLENGE_URL = "https://fplchallenge.premierleague.com/api"
+DRAFT_URL = "https://draft.premierleague.com/api"
 USER_AGENT = "Mozilla/5.0 (compatible; office-fpl-weekly/1.0)"
 
 
@@ -14,7 +16,8 @@ class FPLError(RuntimeError):
 
 
 class FPLClient:
-    def __init__(self, pause=0.25, retries=5):
+    def __init__(self, base=BASE_URL, pause=0.25, retries=5):
+        self.base = base
         self.pause = pause
         self.retries = retries
         self._cache = {}
@@ -22,7 +25,7 @@ class FPLClient:
     def get(self, path):
         if path in self._cache:
             return self._cache[path]
-        url = BASE_URL + path
+        url = self.base + path
         last_error = None
         for attempt in range(self.retries):
             try:
@@ -76,6 +79,9 @@ class FPLClient:
 
     def h2h_standings(self, league_id):
         return self._paged_standings("h2h", league_id)
+
+    def draft_league(self, league_id):
+        return self.get(f"/league/{league_id}/details")
 
     def h2h_matches(self, league_id):
         results, page = [], 1

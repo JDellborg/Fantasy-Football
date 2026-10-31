@@ -1,13 +1,19 @@
 # ⚽ FPL Weekly Roundup for Teams
 
-This posts a short, factual weekly update for our Fantasy Premier League leagues
-into a Microsoft Teams chat. It runs by itself, for free, on GitHub. Once it's
+This publishes a designed weekly web page for our Fantasy Premier League
+leagues, and posts a short card with a "Read the full report" button into a
+Microsoft Teams chat. It runs by itself, for free, on GitHub. Once it's
 set up, you don't need to touch it.
 
 **Leagues covered** (set in `config.json`):
 - Classic: 462321
 - Main H2H: 462400
 - Champions H2H: 939684
+- FPL Challenge: 3846
+- FPL Draft: add the league ID in `config.json` (`"id": null` → your number)
+
+**Web page:** https://jdellborg.github.io/Fantasy-Football/ (latest week), with
+past weeks at `/gw/<number>.html`.
 
 **What's in each update:** a news-style headline picked from the biggest story
 of the week, a one-paragraph summary, the week in numbers, the classic table
@@ -47,8 +53,15 @@ gameweek is completely finished (bonus points confirmed), it posts once.
    as it would appear. (The *fpl-update* download at the bottom contains the
    raw files.)
 
-### Step 4: Send the first one
-Run the workflow again, this time choosing **mode = `post`**. It should appear in
+### Step 4: Switch on the web page (one time)
+1. **Make the repository public:** Settings → General → scroll to *Danger Zone* →
+   **Change visibility** → **Public**.
+2. **Turn on GitHub Pages:** Settings → **Pages** → under *Build and deployment*,
+   set **Source** to **GitHub Actions**.
+
+### Step 5: Send the first one
+Run the workflow again, this time choosing **mode = `post`**. (Choose `page` to
+update the web page without posting to Teams.) It should appear in
 your Teams chat within seconds. After that, it posts automatically every gameweek.
 
 ---
@@ -60,8 +73,9 @@ your Teams chat within seconds. After that, it posts automatically every gamewee
   in the web address when you click their team on the FPL site.
 - **Length:** the numbers at the top of `fpl_weekly/stats.py` control how many
   table rows (`CLASSIC_TOP`, `CLASSIC_BOTTOM`) and notes (`MAX_NOTES`) are shown.
-- **Fonts:** Teams cards can't use custom fonts; they always use the reader's
-  Teams font.
+- **Fonts:** the web page uses New Hero if its .woff2 files are in `site/fonts/`
+  (see the note in that folder); otherwise Montserrat. Teams cards can't use
+  custom fonts.
 - **Re-send an older gameweek:** run the workflow manually and type a gameweek number.
 
 ## Troubleshooting

@@ -2,7 +2,7 @@ name: FPL weekly update
 
 on:
   # Runs daily. Checks every morning at 08:00 UTC (9am UK in summer, 8am in winter).
-  # It only posts once a gameweek is fully finished (bonus points confirmed)
+  # It only publishes once a gameweek is fully finished (bonus points confirmed)
   # and hasn't been posted yet - so it posts once per gameweek, automatically.
   schedule:
     - cron: "0 8 * * *"
@@ -10,9 +10,9 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "Preview only, or post to Teams?"
+        description: "preview = nothing public | page = update the web page only | post = web page + Teams"
         type: choice
-        options: [preview, post]
+        options: [preview, page, post]
         default: preview
       gameweek:
         description: "Gameweek number (leave blank for the latest finished one)"
@@ -21,6 +21,8 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 concurrency:
   group: fpl-weekly
@@ -29,6 +31,11 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+    env:
+      MODE: ${{ github.event_name == 'schedule' && 'scheduled' || inputs.mode }}
+      HAS_WEBHOOK: ${{ secrets.TEAMS_WEBHOOK_URL != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -36,24 +43,22 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Build (and maybe post) the update
+      - name: Build the update and web page
+        id: build
         env:
-          TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
-          MODE: ${{ github.event_name == 'schedule' && 'scheduled' || inputs.mode }}
           GAMEWEEK: ${{ inputs.gameweek }}
         run: |
-          ARGS=""
-          if [ -n "$GAMEWEEK" ]; then ARGS="--gameweek $GAMEWEEK"; fi
           if [ "$MODE" = "scheduled" ]; then
-            if [ -z "$TEAMS_WEBHOOK_URL" ]; then
-              echo "No TEAMS_WEBHOOK_URL secret yet - skipping the automatic post."
+            if [ "$HAS_WEBHOOK" != "true" ]; then
+              echo "No TEAMS_WEBHOOK_URL secret yet - skipping."
+              echo "publish=false" >> "$GITHUB_OUTPUT"
               exit 0
             fi
-            python -m fpl_weekly --post --only-if-new
-          elif [ "$MODE" = "post" ]; then
-            python -m fpl_weekly --post $ARGS
+            python -m fpl_weekly build --only-if-new
+          elif [ -n "$GAMEWEEK" ]; then
+            python -m fpl_weekly build --gameweek "$GAMEWEEK"
           else
-            python -m fpl_weekly $ARGS
+            python -m fpl_weekly build
           fi
 
       - name: Save the preview files
@@ -64,12 +69,29 @@ jobs:
           path: out/
           if-no-files-found: ignore
 
-      - name: Remember which gameweek was posted
+      - name: Publish the web page
+        if: steps.build.outputs.publish == 'true' && env.MODE != 'preview'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/
+
+      - name: Deploy to GitHub Pages
+        if: steps.build.outputs.publish == 'true' && env.MODE != 'preview'
+        uses: actions/deploy-pages@v4
+
+      - name: Post to Teams
+        if: steps.build.outputs.publish == 'true' && (env.MODE == 'post' || env.MODE == 'scheduled')
+        env:
+          TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+        run: python -m fpl_weekly post
+
+      - name: Save the web page archive and posted gameweek
+        if: steps.build.outputs.publish == 'true' && env.MODE != 'preview'
         run: |
-          if [ -n "$(git status --porcelain state/)" ]; then
+          git add site/ state/
+          if ! git diff --cached --quiet; then
             git config user.name "fpl-weekly-bot"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add state/
-            git commit -m "Posted gameweek $(cat state/last_posted_gameweek.txt) update"
+            git commit -m "Gameweek ${{ steps.build.outputs.gameweek }} update"
             git push
           fi

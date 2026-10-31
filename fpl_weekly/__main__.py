@@ -1,9 +1,9 @@
 """Command line entry point.
 
-    python -m fpl_weekly                  # preview the latest finished gameweek
-    python -m fpl_weekly --gameweek 9     # preview a specific gameweek
-    python -m fpl_weekly --post           # post to Teams (needs TEAMS_WEBHOOK_URL)
-    python -m fpl_weekly --post --only-if-new   # what the daily schedule runs
+    python -m fpl_weekly build                 # build the latest finished gameweek (out/ and site/)
+    python -m fpl_weekly build --gameweek 9    # build a specific gameweek
+    python -m fpl_weekly build --only-if-new   # skip if that gameweek was already posted
+    python -m fpl_weekly post                  # send out/teams_payload.json to Teams
 """
 
 import argparse
@@ -15,10 +15,13 @@ from pathlib import Path
 
 from .api import FPLClient
 from .render import to_markdown, to_teams_payload
+from .site import write_site
 from .stats import build_report, latest_final_gameweek
 
 ROOT = Path(__file__).resolve().parent.parent
 STATE_FILE = ROOT / "state" / "last_posted_gameweek.txt"
+OUT = ROOT / "out"
+SITE = ROOT / "site"
 
 
 def last_posted():
@@ -28,24 +31,16 @@ def last_posted():
         return 0
 
 
-def post_to_teams(payload, url):
-    data = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
-    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        if resp.status >= 300:
-            raise RuntimeError(f"Teams returned HTTP {resp.status}")
+def set_output(**values):
+    """Pass values to later GitHub Actions steps."""
+    path = os.environ.get("GITHUB_OUTPUT")
+    if path:
+        with open(path, "a") as f:
+            for k, v in values.items():
+                f.write(f"{k}={v}\n")
 
 
-def main(argv=None):
-    ap = argparse.ArgumentParser(description="Weekly FPL roundup for Teams")
-    ap.add_argument("--gameweek", type=int, help="gameweek to report on (default: latest finished)")
-    ap.add_argument("--post", action="store_true", help="post the card to Teams")
-    ap.add_argument("--only-if-new", action="store_true",
-                    help="do nothing unless a newer gameweek has finished since the last post")
-    ap.add_argument("--config", default=str(ROOT / "config.json"))
-    ap.add_argument("--out", default=str(ROOT / "out"))
-    args = ap.parse_args(argv)
-
+def build(args):
     config = json.loads(Path(args.config).read_text())
     client = FPLClient()
 
@@ -53,34 +48,60 @@ def main(argv=None):
         latest = latest_final_gameweek(client.bootstrap()["events"])
         if not latest or latest <= last_posted():
             print(f"No new finished gameweek (latest final: {latest}, last posted: {last_posted()}).")
+            set_output(publish="false")
             return 0
 
     report = build_report(client, config, args.gameweek)
-    payload = to_teams_payload(report)
+    page = write_site(report, SITE)
+    link = None
+    if config.get("site_url"):
+        link = config["site_url"].rstrip("/") + f"/gw/{report.gameweek}.html"
+    payload = to_teams_payload(report, link)
     markdown = to_markdown(report)
 
-    out = Path(args.out)
-    out.mkdir(parents=True, exist_ok=True)
-    (out / "teams_payload.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False))
-    (out / "card.json").write_text(json.dumps(payload["attachments"][0]["content"], indent=2,
-                                              ensure_ascii=False))
-    (out / "report.md").write_text(markdown)
+    OUT.mkdir(parents=True, exist_ok=True)
+    (OUT / "teams_payload.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False))
+    (OUT / "report.md").write_text(markdown)
+    (OUT / "gameweek.txt").write_text(str(report.gameweek))
+    (OUT / "page.html").write_text(page.read_text())
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:
         with open(summary, "a", encoding="utf-8") as f:
             f.write(markdown + "\n")
     print(markdown)
-
-    if args.post:
-        url = os.environ.get("TEAMS_WEBHOOK_URL")
-        if not url:
-            print("ERROR: TEAMS_WEBHOOK_URL is not set - add it as a GitHub secret.", file=sys.stderr)
-            return 1
-        post_to_teams(payload, url)
-        STATE_FILE.parent.mkdir(exist_ok=True)
-        STATE_FILE.write_text(f"{max(report.gameweek, last_posted())}\n")
-        print(f"Posted gameweek {report.gameweek} to Teams.")
+    set_output(publish="true", gameweek=report.gameweek)
     return 0
+
+
+def post(_args):
+    url = os.environ.get("TEAMS_WEBHOOK_URL")
+    if not url:
+        print("ERROR: TEAMS_WEBHOOK_URL is not set - add it as a GitHub secret.", file=sys.stderr)
+        return 1
+    payload = json.loads((OUT / "teams_payload.json").read_text())
+    gameweek = int((OUT / "gameweek.txt").read_text())
+    data = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        if resp.status >= 300:
+            raise RuntimeError(f"Teams returned HTTP {resp.status}")
+    STATE_FILE.parent.mkdir(exist_ok=True)
+    STATE_FILE.write_text(f"{max(gameweek, last_posted())}\n")
+    print(f"Posted gameweek {gameweek} to Teams.")
+    return 0
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description="Weekly FPL roundup for Teams")
+    sub = ap.add_subparsers(dest="command", required=True)
+    b = sub.add_parser("build", help="build the report, card and web page")
+    b.add_argument("--gameweek", type=int, help="gameweek to report on (default: latest finished)")
+    b.add_argument("--only-if-new", action="store_true",
+                   help="do nothing unless a newer gameweek has finished since the last post")
+    b.add_argument("--config", default=str(ROOT / "config.json"))
+    sub.add_parser("post", help="post the built card to Teams")
+    args = ap.parse_args(argv)
+    return build(args) if args.command == "build" else post(args)
 
 
 if __name__ == "__main__":

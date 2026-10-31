@@ -4,6 +4,11 @@
     { "id": 462400, "label": "Main H2H" },
     { "id": 939684, "label": "Champions H2H" }
   ],
+  "extra_leagues": [
+    { "game": "challenge", "id": 3846, "label": "FPL Challenge" },
+    { "game": "draft", "id": null, "label": "FPL Draft" }
+  ],
+  "site_url": "https://jdellborg.github.io/Fantasy-Football/",
   "title": null,
   "nicknames": {}
 }

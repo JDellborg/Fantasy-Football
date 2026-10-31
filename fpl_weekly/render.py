@@ -38,6 +38,33 @@ def _table_rows(table):
     return out
 
 
+def to_teaser_card(report, link):
+    """Short card for Teams: headline, summary, key facts and a button to the full page."""
+    body = [
+        _text(f"{report.league_name.upper()}  ·  GAMEWEEK {report.gameweek}",
+              size="Small", weight="Bolder", isSubtle=True),
+        _text(report.headline, size="ExtraLarge", weight="Bolder", spacing="Small"),
+        _text(report.standfirst, spacing="Small"),
+    ]
+    for i, (label, value) in enumerate(report.key_facts):
+        body.append({
+            "type": "ColumnSet", "spacing": "Medium" if i == 0 else "Small", "separator": i == 0,
+            "columns": [
+                {"type": "Column", "width": "stretch",
+                 "items": [_text(label, isSubtle=True, size="Small", weight="Bolder")]},
+                {"type": "Column", "width": "auto",
+                 "items": [_text(value, weight="Bolder", horizontalAlignment="Right")]},
+            ],
+        })
+    return {
+        "type": "AdaptiveCard",
+        "version": "1.4",
+        "msteams": {"width": "Full"},
+        "body": body,
+        "actions": [{"type": "Action.OpenUrl", "title": "Read the full report", "url": link}],
+    }
+
+
 def to_adaptive_card(report):
     body = [
         _text(f"{report.league_name.upper()}  ·  GAMEWEEK {report.gameweek}",
@@ -62,14 +89,15 @@ def to_adaptive_card(report):
     }
 
 
-def to_teams_payload(report):
+def to_teams_payload(report, link=None):
     """The message body a Teams 'post when a webhook request is received' workflow expects."""
+    card = to_teaser_card(report, link) if link else to_adaptive_card(report)
     return {
         "type": "message",
         "attachments": [{
             "contentType": "application/vnd.microsoft.card.adaptive",
             "contentUrl": None,
-            "content": to_adaptive_card(report),
+            "content": card,
         }],
     }
 

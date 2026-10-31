@@ -147,3 +147,66 @@ class ReportTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FakeChallenge:
+    def classic_standings(self, league_id):
+        return {"name": "Fake Challenge"}, [
+            {"rank": 1, "last_rank": 2, "player_name": "Alex Tester0", "event_total": 61, "total": 481},
+            {"rank": 2, "last_rank": 1, "player_name": "Outsider Person", "event_total": 40, "total": 470},
+        ]
+
+
+class FakeDraft:
+    def draft_league(self, league_id):
+        return {
+            "league": {"name": "Fake Draft", "scoring": "h"},
+            "league_entries": [{"id": i, "player_first_name": f, "player_last_name": "Tester"}
+                               for i, f in enumerate(["Dee", "Em", "Gee", "Aitch"], start=1)],
+            "matches": [{"event": GW, "finished": True, "league_entry_1": 1, "league_entry_1_points": 50,
+                         "league_entry_2": 2, "league_entry_2_points": 41},
+                        {"event": GW, "finished": True, "league_entry_1": 3, "league_entry_1_points": 30,
+                         "league_entry_2": 4, "league_entry_2_points": 30}],
+            "standings": [{"rank": i, "league_entry": i, "total": 20 - i, "matches_won": 5,
+                           "matches_drawn": 1, "matches_lost": 1} for i in range(1, 5)],
+        }
+
+
+EXTRA_CONFIG = dict(CONFIG, extra_leagues=[{"game": "challenge", "id": 9, "label": "FPL Challenge"},
+                                           {"game": "draft", "id": 8, "label": "FPL Draft"},
+                                           {"game": "draft", "id": None, "label": "Not set up"}],
+                    site_url="https://example.github.io/ff/")
+EXTRAS = {"challenge": FakeChallenge(), "draft": FakeDraft()}
+
+
+class ExtraLeaguesAndSiteTest(unittest.TestCase):
+    def test_extra_leagues_and_site(self):
+        import tempfile
+        from pathlib import Path
+        from fpl_weekly.render import to_teams_payload
+        from fpl_weekly.site import write_site
+
+        report = build_report(FakeClient(), EXTRA_CONFIG, extra_clients=EXTRAS)
+        md = to_markdown(report)
+        self.assertIn("## FPL Challenge", md)
+        self.assertIn("## FPL Draft", md)
+        self.assertNotIn("Not set up", md)
+        self.assertIn("Alex leads on 481", md)   # same person -> same display name
+
+        payload = to_teams_payload(report, "https://example.github.io/ff/gw/6.html")
+        card = payload["attachments"][0]["content"]
+        self.assertEqual(card["actions"][0]["url"], "https://example.github.io/ff/gw/6.html")
+
+        with tempfile.TemporaryDirectory() as d:
+            page = write_site(report, d).read_text()
+            self.assertIn("<h1>", page)
+            self.assertIn("FPL Draft", page)
+            self.assertIn('class="score"', page)
+            self.assertTrue((Path(d) / "index.html").exists())
+
+    def test_broken_extra_league_is_skipped(self):
+        class Broken:
+            def classic_standings(self, league_id):
+                raise RuntimeError("boom")
+        report = build_report(FakeClient(), EXTRA_CONFIG, extra_clients={"challenge": Broken(), "draft": FakeDraft()})
+        self.assertNotIn("FPL Challenge", to_markdown(report))
