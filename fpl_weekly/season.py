@@ -115,9 +115,9 @@ def chip_tracker(builder, Section, Table):
         rows.append(cells)
     if not rows:
         return None
-    start, stop = next(iter(windows.values()))
+    stop = max(w[1] for w in windows.values())
     s = Section("Chip tracker")
-    s.paragraphs.append(f"✓ = still available (chips for GW{start}-{stop}); a gameweek number shows when "
+    s.paragraphs.append(f"✓ = still available to use by GW{stop}; a gameweek number shows when "
                         f"it was used. Still to play across the league: "
                         + ", ".join(f"{left_count[n]} {short}" for n, short in cols) + ".")
     s.table = Table(["Manager"] + [short for _n, short in cols], rows,
