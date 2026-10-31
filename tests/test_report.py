@@ -218,7 +218,7 @@ class ExtraLeaguesAndSiteTest(unittest.TestCase):
 
 
 class SeasonFeaturesTest(unittest.TestCase):
-    def test_month_odds_chips(self):
+    def test_month_and_odds(self):
         report = build_report(FakeClient(n_managers=21), EXTRA_CONFIG, extra_clients=EXTRAS)
         titles = {s.title: s for s in report.sections}
         self.assertIn("Manager of the Month", titles)
@@ -226,18 +226,15 @@ class SeasonFeaturesTest(unittest.TestCase):
         odds = titles["Title odds"].table.rows
         total = sum(float(r[2].rstrip("%")) for r in odds if not r[2].startswith("<"))
         self.assertLessEqual(total, 101)
-        chips = titles["Chip tracker"].table
-        self.assertEqual(chips.headers, ["Manager", "WC", "FH", "BB", "TC"])
-        self.assertIn("GW3", [c for r in chips.rows for c in r])
+        self.assertNotIn("Chip tracker", titles)
 
-    def test_missing_phases_and_chip_rules(self):
+    def test_missing_phases(self):
         client = FakeClient()
         boot = client.bootstrap()
         boot.pop("phases"); boot.pop("chips")
         client.bootstrap = lambda: boot
         titles = [s.title for s in build_report(client, CONFIG).sections]
         self.assertNotIn("Manager of the Month", titles)
-        self.assertIn("Chip tracker", titles)   # falls back to half-season windows
 
 
 class InsightsTest(unittest.TestCase):

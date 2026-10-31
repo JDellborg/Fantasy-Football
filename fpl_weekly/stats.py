@@ -4,7 +4,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
 from .insights import build_insights
-from .season import chip_tracker, manager_of_the_month, title_odds
+from .season import manager_of_the_month, title_odds
 
 CHIP_NAMES = {
     "wildcard": "a Wildcard",
@@ -148,7 +148,6 @@ class ReportBuilder:
         self.players = {p["id"]: p for p in boot["elements"]}
         self.total_players = boot.get("total_players")
         self.phases = boot.get("phases", [])
-        self.chip_rules = boot.get("chips", [])
         self.squads, self.xis, self.caps = {}, {}, {}
         self.stories = []
         self.notes = []          # (priority, text) for "Also this week"
@@ -218,7 +217,6 @@ class ReportBuilder:
         sections += [self.h2h_section(*h) for h in self.h2h]
         sections += [self.extra_section(lg) for lg in self.config.get("extra_leagues", [])
                      if lg.get("id")]
-        sections += self.season_features(chip_tracker)
         self.collect_notes()
         self.insights = build_insights(self)
         if self.insights:

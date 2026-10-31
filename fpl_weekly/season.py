@@ -1,9 +1,8 @@
-"""Season-long features for the web page: Manager of the Month, title odds, chip tracker."""
+"""Season-long features for the web page: Manager of the Month and title odds."""
 
 import random
 import statistics
 
-CHIP_COLUMNS = [("wildcard", "WC"), ("freehit", "FH"), ("bboost", "BB"), ("3xc", "TC")]
 SIMULATIONS = 20000
 
 
@@ -90,37 +89,4 @@ def title_odds(builder, Section, Table):
         + (f" The other {rest} managers are below 1%." if rest else ""))
     s.table = Table(["Manager", "Pts", "Chance"], rows,
                     align=["left", "right", "right"], widths=["stretch", "auto", "auto"])
-    return s
-
-
-def chip_tracker(builder, Section, Table):
-    """Which chips each manager still has in the current chip window."""
-    gw = builder.gw
-    windows = {}  # chip name -> (start, stop) containing gw
-    for c in builder.chip_rules:
-        if c.get("start_event", 1) <= gw <= c.get("stop_event", 38):
-            windows[c["name"]] = (c.get("start_event", 1), c.get("stop_event", 38))
-    if not windows:  # fallback: one of each chip per half-season
-        half = (1, 19) if gw <= 19 else (20, 38)
-        windows = {name: half for name, _ in CHIP_COLUMNS}
-    cols = [(name, short) for name, short in CHIP_COLUMNS if name in windows]
-    rows, left_count = [], {}
-    for m in sorted(builder.active, key=lambda m: m.name):
-        cells = [m.name]
-        for name, _short in cols:
-            start, stop = windows[name]
-            used = [c["event"] for c in m.chips if c.get("name") == name and start <= c.get("event", 0) <= stop]
-            cells.append(f"GW{used[-1]}" if used else "✓")
-            left_count[name] = left_count.get(name, 0) + (0 if used else 1)
-        rows.append(cells)
-    if not rows:
-        return None
-    stop = max(w[1] for w in windows.values())
-    s = Section("Chip tracker")
-    s.paragraphs.append(f"✓ = still available to use by GW{stop}; a gameweek number shows when "
-                        f"it was used. Still to play across the league: "
-                        + ", ".join(f"{left_count[n]} {short}" for n, short in cols) + ".")
-    s.table = Table(["Manager"] + [short for _n, short in cols], rows,
-                    align=["left"] + ["center"] * len(cols), widths=["stretch"] + ["auto"] * len(cols))
-    s.web_only = True
     return s
