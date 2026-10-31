@@ -1,6 +1,6 @@
 # ⚽ FPL Weekly Roundup for Teams
 
-This posts a banter-filled weekly update for our Fantasy Premier League leagues
+This posts a short, factual weekly update for our Fantasy Premier League leagues
 into a Microsoft Teams chat. It runs by itself, for free, on GitHub. Once it's
 set up, you don't need to touch it.
 
@@ -9,10 +9,10 @@ set up, you don't need to touch it.
 - Main H2H: 462400
 - Champions H2H: 939684
 
-**What's in each update:** Manager of the Week, Wooden Spoon, the classic table
-with movers, a form guide (last 4 gameweeks) and streaks, captain hits and
-flops, best and worst transfers, points hits, chips played, bench regret,
-differentials, results and upsets for both H2H leagues, and season records.
+**What's in each update:** a news-style headline picked from the biggest story
+of the week, a one-paragraph summary, the week in numbers, the classic table
+(top five and bottom two), results from both H2H leagues, and up to five short
+notes (chips, captains, transfers, hits, bench points, form).
 
 **When it posts:** GitHub checks every morning at 08:00 UTC. As soon as a
 gameweek is completely finished (bonus points confirmed), it posts once.
@@ -58,9 +58,10 @@ your Teams chat within seconds. After that, it posts automatically every gamewee
 - **Nicknames:** in `config.json`, map a manager's FPL team ID to a nickname, e.g.
   `"nicknames": { "1234567": "The Gaffer" }`. You can find a manager's team ID
   in the web address when you click their team on the FPL site.
-- **Banter lines:** edit `fpl_weekly/banter.py`. Each section has a list of
-  lines, so add as many as you like. Words in `{curly brackets}` get filled in
-  automatically.
+- **Length:** the numbers at the top of `fpl_weekly/stats.py` control how many
+  table rows (`CLASSIC_TOP`, `CLASSIC_BOTTOM`) and notes (`MAX_NOTES`) are shown.
+- **Fonts:** Teams cards can't use custom fonts; they always use the reader's
+  Teams font.
 - **Re-send an older gameweek:** run the workflow manually and type a gameweek number.
 
 ## Troubleshooting

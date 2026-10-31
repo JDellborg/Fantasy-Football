@@ -113,18 +113,21 @@ class ReportTest(unittest.TestCase):
         report = build_report(client, CONFIG, gameweek)
         md = to_markdown(report)
         payload = to_teams_payload(report)
-        size = len(json.dumps(payload).encode())
+        size = len(json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode())
         self.assertLess(size, 28_000, "Teams cards must stay under ~28KB")
         self.assertIn("Manager of the Week", md)
+        self.assertNotIn("| |", md)  # no blank table headers
+        self.assertLess(len(report.headline), 90)
         self.assertEqual(payload["attachments"][0]["content"]["type"], "AdaptiveCard")
         return report, md
 
     def test_latest_gameweek(self):
         report, md = self.check(FakeClient())
         self.assertEqual(report.gameweek, GW)
-        for heading in ("Classic League Table", "Main H2H", "Champions H2H", "Season So Far",
-                        "Captaincy Corner", "Chips Played"):
+        for heading in ("Fake Office League", "Main H2H", "Champions H2H", "Also this week",
+                        "| Pos | Manager | GW | Total | +/- |", "| Home | Score | Away |"):
             self.assertIn(heading, md)
+        self.assertNotIn("Season So Far", md)
         # duplicate first names fall back to full names
         self.assertIn("Sam Tester1", md)
 

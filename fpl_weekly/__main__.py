@@ -29,7 +29,7 @@ def last_posted():
 
 
 def post_to_teams(payload, url):
-    data = json.dumps(payload).encode("utf-8")
+    data = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=30) as resp:
         if resp.status >= 300:

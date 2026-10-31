@@ -1,32 +1,44 @@
-"""Crunches FPL data into a list of report sections (renderer-agnostic)."""
+"""Crunches FPL data into a short, factual weekly report (renderer-agnostic)."""
 
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
-from .banter import Banter
-
 CHIP_NAMES = {
-    "wildcard": "Wildcard",
-    "freehit": "Free Hit",
-    "bboost": "Bench Boost",
-    "3xc": "Triple Captain",
-    "manager": "Assistant Manager",
+    "wildcard": "a Wildcard",
+    "freehit": "a Free Hit",
+    "bboost": "a Bench Boost",
+    "3xc": "a Triple Captain",
+    "manager": "the Assistant Manager chip",
 }
 FORM_WEEKS = 4
+CLASSIC_TOP = 5          # rows shown at the top of the classic table
+CLASSIC_BOTTOM = 2       # rows shown at the bottom (if the league is bigger)
+MAX_NOTES = 5            # bullet points in "Also this week"
+NUMBER_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"]
+
+
+@dataclass
+class Table:
+    headers: list                    # None = no header row (label/value list)
+    rows: list                       # list of lists of cell text
+    align: list = None               # "left" / "center" / "right" per column
+    widths: list = None              # "auto" / "stretch" per column
 
 
 @dataclass
 class Section:
     title: str
-    lines: list = field(default_factory=list)   # short paragraphs (light markdown)
-    facts: list = field(default_factory=list)   # (label, value) rows
+    paragraphs: list = field(default_factory=list)
+    table: Table = None
+    bullets: list = field(default_factory=list)
 
 
 @dataclass
 class Report:
-    title: str
-    subtitle: str
+    headline: str
+    standfirst: str
     gameweek: int
+    league_name: str
     sections: list
 
 
@@ -45,6 +57,16 @@ class Manager:
         return None if row is None else row["points"] - row["event_transfers_cost"]
 
 
+@dataclass
+class Story:
+    """A candidate for the headline. Higher weight = more newsworthy."""
+    weight: float
+    headline: str
+    clause: str = None               # shorter version for "... as <clause>"
+    subject: str = None              # who it's about
+    topic: str = None                # which league/feature it's about
+
+
 # --- small helpers ---------------------------------------------------------
 
 def latest_final_gameweek(events):
@@ -56,7 +78,11 @@ def join_names(names):
     names = list(names)
     if len(names) <= 1:
         return "".join(names)
-    return ", ".join(names[:-1]) + " & " + names[-1]
+    return ", ".join(names[:-1]) + " and " + names[-1]
+
+
+def words(n):
+    return NUMBER_WORDS[n] if 0 <= n < len(NUMBER_WORDS) else str(n)
 
 
 def ordinal(n):
@@ -64,21 +90,25 @@ def ordinal(n):
     return f"{n}{suffix}"
 
 
-def arrow(move):
-    if move is None or move == 0:
-        return "➖"
-    return f"🔺{move}" if move > 0 else f"🔻{-move}"
+def movement(move):
+    if not move:
+        return "-"
+    return f"▲{move}" if move > 0 else f"▼{-move}"
+
+
+def plural(n, one, many=None):
+    return one if n == 1 else (many or one + "s")
 
 
 def competition_rank(items, key):
-    """items -> {item_id: rank}, ties share a rank (1, 2, 2, 4)."""
+    """items -> {item_id: rank}; ties share a rank (1, 2, 2, 4)."""
     ordered = sorted(items, key=key)
     ranks, prev, prev_rank = {}, object(), 0
-    for i, (item_id, *_rest) in enumerate(ordered, start=1):
-        k = key((item_id, *_rest))
+    for i, item in enumerate(ordered, start=1):
+        k = key(item)
         if k != prev:
             prev_rank, prev = i, k
-        ranks[item_id] = prev_rank
+        ranks[item[0]] = prev_rank
     return ranks
 
 
@@ -104,11 +134,21 @@ class ReportBuilder:
         if not self.gw:
             raise SystemExit("No finished gameweek yet - nothing to report.")
         self.players = {p["id"]: p for p in boot["elements"]}
-        self.banter = Banter(seed=f"{config['classic_league_id']}-{self.gw}")
+        self.stories = []
+        self.notes = []          # (priority, text) for "Also this week"
 
     def pname(self, element_id):
         p = self.players.get(element_id)
         return p["web_name"] if p else f"Player {element_id}"
+
+    def pts(self, element_id):
+        return self.live.get(element_id, {}).get("total_points", 0)
+
+    def mins(self, element_id):
+        return self.live.get(element_id, {}).get("minutes", 0)
+
+    def note(self, priority, text):
+        self.notes.append((priority, text))
 
     # -- data loading --
     def load(self):
@@ -132,23 +172,17 @@ class ReportBuilder:
 
         gw = self.gw
         for m in self.managers:
-            hist = self.client.entry_history(m.entry)
-            m.history = {row["event"]: row for row in hist.get("current", [])}
+            m.history = {row["event"]: row for row in self.client.entry_history(m.entry).get("current", [])}
         self.active = [m for m in self.managers if gw in m.history]
         if not self.active:
             raise SystemExit(f"Nobody in the league has a score for gameweek {gw}.")
+        self.by_entry = {m.entry: m for m in self.managers}
 
         self.live = {el["id"]: el["stats"] for el in self.client.live(gw)["elements"]}
         for m in self.active:
             m.picks = self.client.picks(m.entry, gw)
             if m.history[gw].get("event_transfers"):
                 m.transfers = [t for t in self.client.transfers(m.entry) if t["event"] == gw]
-
-    def pts(self, element_id):
-        return self.live.get(element_id, {}).get("total_points", 0)
-
-    def mins(self, element_id):
-        return self.live.get(element_id, {}).get("minutes", 0)
 
     # -- build --
     def build(self):
@@ -157,129 +191,156 @@ class ReportBuilder:
         scores = {m.entry: m.net(gw) for m in self.active}
         self.top = max(scores.values())
         self.bottom = min(scores.values())
-        self.motw = [m for m in self.active if scores[m.entry] == self.top]
-        self.spoon = [m for m in self.active if scores[m.entry] == self.bottom]
+        self.best = [m for m in self.active if scores[m.entry] == self.top]
+        self.worst = [m for m in self.active if scores[m.entry] == self.bottom]
         self.league_avg = round(sum(scores.values()) / len(scores), 1)
 
-        sections = [self.headline_section(), self.table_section(), self.form_section(),
-                    self.captain_section(), self.transfer_section(), self.chip_section(),
-                    self.bench_and_differential_section()]
+        sections = [self.week_section(), self.classic_section()]
         sections += [self.h2h_section(*h) for h in self.h2h]
-        sections.append(self.season_section())
-        sections = [s for s in sections if s and (s.lines or s.facts)]
-        sections.append(Section("👋 Until next week", [self.banter.line(
-            "outro",
-            motw=join_names(m.name for m in self.motw),
-            spoon=join_names(m.name for m in self.spoon))]))
+        self.collect_notes()
+        sections.append(self.notes_section())
+        sections = [s for s in sections if s and (s.paragraphs or s.table or s.bullets)]
 
-        title = self.config.get("title") or self.league["name"]
         return Report(
-            title=f"⚽ {title} - Gameweek {gw} Roundup",
-            subtitle=self.banter.line("intro"),
+            headline=self.headline(),
+            standfirst=self.standfirst(),
             gameweek=gw,
+            league_name=self.config.get("title") or self.league["name"],
             sections=sections,
         )
 
-    def headline_section(self):
-        gw, ev = self.gw, self.events.get(self.gw, {})
-        motw_names = join_names(f"**{m.name}** ({m.team})" for m in self.motw)
-        spoon_names = join_names(f"**{m.name}** ({m.team})" for m in self.spoon)
-        s = Section("🏆 Manager of the Week")
-        s.lines.append(self.banter.line("motw", name=motw_names, pts=self.top))
-        s.lines.append("🥄 **Wooden Spoon**")
-        s.lines.append(self.banter.line("spoon", name=spoon_names, pts=self.bottom))
-        s.facts = [
-            ("League average", f"{self.league_avg}"),
-            ("FPL global average", f"{ev.get('average_entry_score', '-')}"),
-            ("Highest score in the world", f"{ev.get('highest_score', '-')}"),
+    # -- headline --
+    def headline(self):
+        stories = sorted(self.stories, key=lambda s: -s.weight)
+        if not stories:
+            return f"Gameweek {self.gw}: {join_names(m.name for m in self.best)} top the scoring"
+        main = stories[0].headline
+        first = stories[0]
+        for other in stories[1:]:
+            if not other.clause or len(main) + len(other.clause) + 4 > 75:
+                continue
+            if other.subject and other.subject in (first.subject or ""):
+                continue
+            if first.subject and first.subject in (other.subject or ""):
+                continue
+            if other.topic and other.topic == first.topic:
+                continue
+            return f"{main} as {other.clause}"
+        return main
+
+    def standfirst(self):
+        gw = self.gw
+        best = join_names(m.name for m in self.best)
+        verb = "were" if len(self.best) > 1 else "was"
+        text = (f"{best} {verb} the top scorer{'s' if len(self.best) > 1 else ''} in Gameweek {gw} "
+                f"with {self.top} points. The league averaged {self.league_avg}")
+        ev = self.events.get(gw, {})
+        if ev.get("average_entry_score") is not None:
+            text += f", against an overall FPL average of {ev['average_entry_score']}"
+        text += "."
+        if getattr(self, "leader_sentence", None):
+            text += " " + self.leader_sentence
+        return text
+
+    # -- sections --
+    def week_section(self):
+        gw = self.gw
+        s = Section(f"Gameweek {gw} in numbers")
+        rows = [
+            ["Manager of the Week", f"{join_names(m.name for m in self.best)} ({self.top})"],
+            ["Lowest score", f"{join_names(m.name for m in self.worst)} ({self.bottom})"],
+            ["League average", f"{self.league_avg}"],
         ]
-        ranked = [m for m in self.active if m.history[gw].get("overall_rank")]
-        if ranked:
-            best = min(ranked, key=lambda m: m.history[gw]["overall_rank"])
-            s.facts.append(("Best world rank", f"{best.name} (#{best.history[gw]['overall_rank']:,})"))
+        caps = {m.entry: self.captain_of(m) for m in self.active}
+        self.caps = {e: c for e, c in caps.items() if c}
+        if self.caps:
+            fav, n = Counter(c[3] for c in self.caps.values()).most_common(1)[0]
+            fp = self.pts(fav)
+            rows.append(["Most captained", f"{self.pname(fav)}, {n} of {len(self.caps)} "
+                                           f"({fp} {plural(fp, 'pt', 'pts')})"])
+        s.table = Table(None, rows, widths=["auto", "stretch"])
+
+        avg = self.league_avg
+        if self.top >= max(avg + 20, 75):
+            self.stories.append(Story(55 + self.top - avg,
+                                      f"{self.best[0].name} hits {self.top} to top Gameweek {gw}",
+                                      f"{self.best[0].name} scores {self.top}",
+                                      self.best[0].name, "week"))
+        else:
+            self.stories.append(Story(20 + self.top - avg,
+                                      f"{self.best[0].name} tops Gameweek {gw} with {self.top}",
+                                      f"{self.best[0].name} tops the week with {self.top}",
+                                      self.best[0].name, "week"))
+        if self.bottom <= min(avg - 20, 30):
+            self.stories.append(Story(30 + avg - self.bottom,
+                                      f"{self.worst[0].name} held to {self.bottom} in Gameweek {gw}",
+                                      f"{self.worst[0].name} manages {self.bottom}",
+                                      self.worst[0].name, "week-low"))
         return s
 
-    def table_section(self):
+    def classic_section(self):
         gw = self.gw
         now = competition_rank([(m.entry, m.history[gw]["total_points"]) for m in self.active],
                                key=lambda x: -x[1])
         prev_pool = [m for m in self.active if gw - 1 in m.history]
         prev = competition_rank([(m.entry, m.history[gw - 1]["total_points"]) for m in prev_pool],
                                 key=lambda x: -x[1]) if prev_pool else {}
-        moves = {m.entry: (prev[m.entry] - now[m.entry]) if m.entry in prev else None
-                 for m in self.active}
+        moves = {m.entry: (prev[m.entry] - now[m.entry]) if m.entry in prev else 0 for m in self.active}
 
         ordered = sorted(self.active, key=lambda m: (now[m.entry], m.name))
-        if len(ordered) > 12:
-            shown = ordered[:6] + [None] + ordered[-3:]
+        if len(ordered) > CLASSIC_TOP + CLASSIC_BOTTOM + 1:
+            shown = ordered[:CLASSIC_TOP] + [None] + ordered[-CLASSIC_BOTTOM:]
         else:
             shown = ordered
-        s = Section("📋 Classic League Table")
+        rows = []
         for m in shown:
             if m is None:
-                s.facts.append(("…", "…"))
+                rows.append(["", "…", "", "", ""])
                 continue
-            label = f"{now[m.entry]}. {m.name} - {m.team}"
-            s.facts.append((label, f"{m.history[gw]['total_points']} pts ({m.net(gw)} this GW) {arrow(moves[m.entry])}"))
+            rows.append([str(now[m.entry]), m.name, str(m.net(gw)),
+                         str(m.history[gw]["total_points"]), movement(moves[m.entry])])
+        s = Section(self.league["name"])
+        s.table = Table(["Pos", "Manager", "GW", "Total", "+/-"], rows,
+                        align=["left", "left", "right", "right", "right"],
+                        widths=["auto", "stretch", "auto", "auto", "auto"])
 
-        real_moves = {e: mv for e, mv in moves.items() if mv}
-        if real_moves:
-            by_entry = {m.entry: m for m in self.active}
-            up = max(real_moves.values())
-            down = min(real_moves.values())
-            if up > 0:
-                who = join_names(by_entry[e].name for e, mv in real_moves.items() if mv == up)
-                s.lines.append("📈 " + self.banter.line("climber", name=who, n=up, places="place" if up == 1 else "places"))
-            if down < 0:
-                who = join_names(by_entry[e].name for e, mv in real_moves.items() if mv == down)
-                s.lines.append("📉 " + self.banter.line("faller", name=who, n=-down, places="place" if down == -1 else "places"))
-        return s
+        # leader story
+        leader = ordered[0]
+        second = ordered[1] if len(ordered) > 1 else None
+        gap = leader.history[gw]["total_points"] - (second.history[gw]["total_points"] if second else 0)
+        prev_leaders = [e for e, r in prev.items() if r == 1]
+        joint = [m for m in ordered if now[m.entry] == 1]
+        if len(joint) > 1:
+            names = join_names(m.name for m in joint)
+            self.leader_sentence = (f"{names} are level at the top of the classic league on "
+                                    f"{leader.history[gw]['total_points']} points.")
+            self.stories.append(Story(70, f"{names} level at the top of the classic league",
+                                      f"{names} share top spot", names, "classic-top"))
+        elif second and prev_leaders and leader.entry not in prev_leaders:
+            self.leader_sentence = (f"{leader.name} goes top of the classic league, "
+                                    f"{gap} {plural(gap, 'point')} ahead of {second.name}.")
+            self.stories.append(Story(90, f"{leader.name} goes top of the classic league",
+                                      f"{leader.name} goes top", leader.name, "classic-top"))
+        elif second:
+            self.leader_sentence = (f"{leader.name} stays top of the classic league, "
+                                    f"{gap} {plural(gap, 'point')} clear of {second.name}.")
+            self.stories.append(Story(15, f"{leader.name} stays top of the classic league",
+                                      f"{leader.name} stays top", leader.name, "classic-top"))
 
-    def form_section(self):
-        gw = self.gw
-        weeks = [g for g in range(gw - FORM_WEEKS + 1, gw + 1) if g >= 1]
-        if len(weeks) < 2:
-            return None
-        form = {m.entry: sum(m.net(g) or 0 for g in weeks) for m in self.active
-                if all(g in m.history for g in weeks)}
-        if len(form) < 2:
-            return None
-        by_entry = {m.entry: m for m in self.active}
-        ordered = sorted(form.items(), key=lambda kv: -kv[1])
-        s = Section(f"🔥 Form Guide (last {len(weeks)} GWs)")
-        hot_e, hot_p = ordered[0]
-        cold_e, cold_p = ordered[-1]
-        s.lines.append("🔥 " + self.banter.line("hot", name=by_entry[hot_e].name, pts=hot_p, weeks=len(weeks)))
-        s.lines.append("🥶 " + self.banter.line("cold", name=by_entry[cold_e].name, pts=cold_p, weeks=len(weeks)))
-        for e, p in ordered[:3]:
-            s.facts.append((f"🔥 {by_entry[e].name}", f"{p} pts"))
-        for e, p in ordered[-3:][::-1] if len(ordered) > 3 else []:
-            s.facts.append((f"🥶 {by_entry[e].name}", f"{p} pts"))
-
-        # streaks of beating / missing the league average
-        avgs = {}
-        for g in range(1, gw + 1):
-            vals = [m.net(g) for m in self.managers if g in m.history]
-            if vals:
-                avgs[g] = sum(vals) / len(vals)
-        streaks = {}
-        for m in self.active:
-            above = m.net(gw) > avgs[gw]
-            n = 0
-            for g in range(gw, 0, -1):
-                if g not in m.history or g not in avgs or (m.net(g) > avgs[g]) != above:
-                    break
-                n += 1
-            streaks[m.entry] = n if above else -n
-        best = max(streaks.values())
-        worst = min(streaks.values())
-        if best >= 3:
-            who = join_names(by_entry[e].name for e, v in streaks.items() if v == best)
-            s.lines.append(f"📈 {who} beat the league average **{best} weeks running**.")
-        if worst <= -3:
-            who = join_names(by_entry[e].name for e, v in streaks.items() if v == worst)
-            s.lines.append(f"📉 {who} {'has' if '&' not in who else 'have'} been below average "
-                           f"**{-worst} weeks running**. Concerning.")
+        # movers
+        up = max(moves.values())
+        if up >= 3:
+            who = [m for m in self.active if moves[m.entry] == up][0]
+            s.paragraphs.append(f"{who.name} made the biggest jump, up {words(up)} places to "
+                                f"{ordinal(now[who.entry])}.")
+            self.stories.append(Story(35 + up * 2, f"{who.name} climbs {words(up)} places to "
+                                      f"{ordinal(now[who.entry])}",
+                                      f"{who.name} climbs {words(up)} places", who.name, "classic-move"))
+        down = min(moves.values())
+        if down <= -3:
+            who = [m for m in self.active if moves[m.entry] == down][0]
+            s.paragraphs.append(f"{who.name} had the biggest drop, down {words(-down)} places to "
+                                f"{ordinal(now[who.entry])}.")
         return s
 
     def captain_of(self, m):
@@ -293,134 +354,6 @@ class ReportBuilder:
         if self.mins(cap["element"]) == 0 and vice and self.mins(vice["element"]) > 0:
             chosen, swapped = vice, True
         return chosen["element"], self.pts(chosen["element"]) * mult, swapped, cap["element"]
-
-    def captain_section(self):
-        caps = {m.entry: self.captain_of(m) for m in self.active}
-        caps = {e: c for e, c in caps.items() if c}
-        if not caps:
-            return None
-        by_entry = {m.entry: m for m in self.active}
-        s = Section("©️ Captaincy Corner")
-        picked = Counter(c[3] for c in caps.values())
-        fav, n = picked.most_common(1)[0]
-        s.facts.append(("Most popular captain", f"{self.pname(fav)} ({n}/{len(caps)}) - {self.pts(fav)} pts"))
-        best = max(c[1] for c in caps.values())
-        worst = min(c[1] for c in caps.values())
-        best_e = [e for e, c in caps.items() if c[1] == best]
-        worst_e = [e for e, c in caps.items() if c[1] == worst]
-        s.lines.append("👑 " + self.banter.line(
-            "best_captain", name=join_names(by_entry[e].name for e in best_e),
-            player=self.pname(caps[best_e[0]][0]), pts=best))
-        if worst < best:
-            s.lines.append("🤦 " + self.banter.line(
-                "worst_captain", name=join_names(by_entry[e].name for e in worst_e),
-                player=self.pname(caps[worst_e[0]][0]), pts=worst))
-        saved = [e for e, c in caps.items() if c[2]]
-        if saved:
-            s.lines.append(f"🙏 Saved by the vice-captain: {join_names(by_entry[e].name for e in saved)}.")
-        return s
-
-    def transfer_section(self):
-        gw = self.gw
-        s = Section("🔄 Transfers & Hits")
-        singles, hits = [], []
-        for m in self.active:
-            chip = (m.picks or {}).get("active_chip")
-            if chip in ("wildcard", "freehit"):
-                continue
-            delta_total = 0
-            for t in m.transfers:
-                d = self.pts(t["element_in"]) - self.pts(t["element_out"])
-                delta_total += d
-                singles.append((d, m, t))
-            cost = m.history[gw].get("event_transfers_cost", 0)
-            if cost and m.transfers:
-                hits.append((delta_total - cost, cost, m))
-        if singles:
-            d, m, t = max(singles, key=lambda x: x[0])
-            if d > 0:
-                s.facts.append(("✅ Best transfer", f"{m.name}: {self.pname(t['element_out'])} ➡️ "
-                                f"{self.pname(t['element_in'])} ({d:+d})"))
-            d, m, t = min(singles, key=lambda x: x[0])
-            if d < 0:
-                s.facts.append(("❌ Worst transfer", f"{m.name}: {self.pname(t['element_out'])} ➡️ "
-                                f"{self.pname(t['element_in'])} ({d:+d})"))
-        hits.sort(key=lambda x: -x[0])
-        if len(hits) > 3:  # keep it readable: best two and the worst one
-            hits = hits[:2] + hits[-1:]
-        for net, cost, m in hits:
-            key = "hit_good" if net > 0 else "hit_bad"
-            s.lines.append("💸 " + self.banter.line(key, name=m.name, cost=cost, net=net))
-        total_moves = sum(m.history[gw].get("event_transfers", 0) for m in self.active)
-        if total_moves:
-            busiest = max(self.active, key=lambda m: m.history[gw].get("event_transfers", 0))
-            s.facts.append(("Transfers made in the league", str(total_moves)))
-            s.facts.append(("Busiest in the market", f"{busiest.name} "
-                            f"({busiest.history[gw].get('event_transfers', 0)})"))
-        return s
-
-    def chip_section(self):
-        s = Section("🃏 Chips Played")
-        for m in self.active:
-            chip = (m.picks or {}).get("active_chip")
-            if not chip:
-                continue
-            label = CHIP_NAMES.get(chip, chip)
-            net = m.net(self.gw)
-            if chip == "3xc":
-                cap = self.captain_of(m)
-                extra = f"{self.pname(cap[0])} returned **{cap[1]}**" if cap else ""
-                verdict = "Inspired." if cap and cap[1] >= 24 else "Oof." if cap and cap[1] <= 9 else ""
-                s.lines.append(f"🃏 **{m.name}** went Triple Captain: {extra}. {verdict}".strip())
-            elif chip == "bboost":
-                bench = [p for p in m.picks["picks"] if p.get("position", 0) > 11]
-                bench_pts = sum(self.pts(p["element"]) for p in bench)
-                verdict = "Worth it." if bench_pts >= 15 else "Might as well have saved it." if bench_pts < 8 else ""
-                s.lines.append(f"🃏 **{m.name}** Bench Boosted for **{bench_pts}** bench points. {verdict}".strip())
-            else:
-                vs = "above" if net > self.league_avg else "below"
-                s.lines.append(f"🃏 **{m.name}** played the {label} and scored **{net}** "
-                               f"({vs} the league average of {self.league_avg}).")
-        return s
-
-    def bench_and_differential_section(self):
-        gw = self.gw
-        s = Section("🪑 Bench Regret & 🎯 Differentials")
-        benches = [(m.history[gw].get("points_on_bench", 0), m) for m in self.active
-                   if (m.picks or {}).get("active_chip") != "bboost"]
-        if benches:
-            top = max(b for b, _ in benches)
-            if top >= 5:
-                who = join_names(m.name for b, m in benches if b == top)
-                s.lines.append("🪑 " + self.banter.line("bench", name=who, pts=top))
-            s.facts.append(("Total points benched by the league", str(sum(b for b, _ in benches))))
-
-        squads, xis = {}, {}
-        for m in self.active:
-            picks = (m.picks or {}).get("picks", [])
-            if not picks:
-                continue
-            squads[m.entry] = {p["element"] for p in picks}
-            xi = {p["element"] for p in picks if p.get("position", 0) <= 11}
-            for sub in (m.picks or {}).get("automatic_subs", []):
-                xi.discard(sub["element_out"])
-                xi.add(sub["element_in"])
-            if m.picks.get("active_chip") == "bboost":
-                xi = set(squads[m.entry])
-            xis[m.entry] = xi
-        if squads:
-            owners = Counter(el for sq in squads.values() for el in sq)
-            by_entry = {m.entry: m for m in self.active}
-            diffs = [(self.pts(el), el, e) for e, xi in xis.items() for el in xi if owners[el] == 1]
-            if diffs and len(squads) > 2:
-                pts, el, e = max(diffs)
-                if pts >= 6:
-                    s.lines.append("🎯 " + self.banter.line("differential", name=by_entry[e].name,
-                                                           player=self.pname(el), pts=pts))
-            template, count = owners.most_common(1)[0]
-            s.facts.append(("Most-owned player in the league",
-                            f"{self.pname(template)} ({count}/{len(squads)} squads) - {self.pts(template)} pts"))
-        return s
 
     # -- head to head --
     def h2h_table(self, matches, upto):
@@ -436,9 +369,11 @@ class ReportBuilder:
                 mine, theirs = mt[f"entry_{side}_points"], mt[f"entry_{other}_points"]
                 r["pf"] += mine
                 if mine > theirs:
-                    r["w"] += 1; r["pts"] += 3
+                    r["w"] += 1
+                    r["pts"] += 3
                 elif mine == theirs:
-                    r["d"] += 1; r["pts"] += 1
+                    r["d"] += 1
+                    r["pts"] += 1
                 else:
                     r["l"] += 1
         ranks = competition_rank([(e, r["pts"], r["pf"]) for e, r in rows.items()],
@@ -448,25 +383,28 @@ class ReportBuilder:
     def side_name(self, mt, side):
         e = mt[f"entry_{side}_entry"]
         if e is None:
-            return "League Average"
+            return "League average"
         return self.names.get(e) or mt.get(f"entry_{side}_player_name") or mt.get(f"entry_{side}_name")
 
     def h2h_section(self, lg, league, _table, matches):
         gw = self.gw
         label = lg.get("label") or league.get("name")
-        s = Section(f"⚔️ {label}")
         this_week = [mt for mt in matches if mt["event"] == gw]
         if not this_week:
             return None
+        s = Section(label)
         _, prev_ranks = self.h2h_table(matches, gw - 1)
         rows, ranks = self.h2h_table(matches, gw)
 
-        decided = []
+        results, decided = [], []
         for mt in this_week:
             n1, n2 = self.side_name(mt, "1"), self.side_name(mt, "2")
             p1, p2 = mt["entry_1_points"], mt["entry_2_points"]
-            ko = " (KO)" if mt.get("is_knockout") else ""
-            s.facts.append((f"{n1} vs {n2}{ko}", f"{p1} - {p2}"))
+            if p1 > p2:
+                n1 = f"**{n1}**"
+            elif p2 > p1:
+                n2 = f"**{n2}**"
+            results.append([n1, f"{p1}-{p2}", n2])
             if p1 != p2:
                 w, l = ("1", "2") if p1 > p2 else ("2", "1")
                 decided.append({
@@ -475,109 +413,190 @@ class ReportBuilder:
                     "went": mt[f"entry_{w}_entry"], "lent": mt[f"entry_{l}_entry"],
                     "margin": abs(p1 - p2),
                 })
-        if decided:
-            big = max(decided, key=lambda d: d["margin"])
-            s.lines.append("💥 " + self.banter.line("h2h_thrashing", winner=f"**{big['winner']}**",
-                                                    loser=big["loser"], margin=big["margin"]))
-            small = min(decided, key=lambda d: d["margin"])
-            if small is not big and small["margin"] <= 10:
-                s.lines.append("😬 " + self.banter.line("h2h_narrow", winner=f"**{small['winner']}**",
-                                                       loser=small["loser"], margin=small["margin"],
-                                                       points="point" if small["margin"] == 1 else "points"))
-            robbed = max(decided, key=lambda d: d["lpts"])
-            if robbed["lpts"] > self.league_avg + 10:
-                s.lines.append("😭 " + self.banter.line("h2h_robbed", name=robbed["loser"], pts=robbed["lpts"]))
-            jammy = min(decided, key=lambda d: d["wpts"])
-            if jammy["wpts"] < self.league_avg - 5:
-                s.lines.append("🍀 " + self.banter.line("h2h_jammy", name=jammy["winner"], pts=jammy["wpts"]))
-            upsets = [d for d in decided if d["went"] in prev_ranks and d["lent"] in prev_ranks
-                      and prev_ranks[d["went"]] - prev_ranks[d["lent"]] >= 3]
-            if upsets and gw > 1:
-                u = max(upsets, key=lambda d: prev_ranks[d["went"]] - prev_ranks[d["lent"]])
-                s.lines.append("🚨 " + self.banter.line(
-                    "h2h_upset", winner=f"**{u['winner']}**", loser=u["loser"],
-                    wrank=ordinal(prev_ranks[u["went"]]), lrank=ordinal(prev_ranks[u["lent"]])))
+        s.table = Table(["Home", "Score", "Away"], results,
+                        align=["right", "center", "left"], widths=["stretch", "auto", "stretch"])
 
-        # current streaks
-        results = defaultdict(list)
+        if ranks:
+            ordered = sorted(ranks, key=lambda e: ranks[e])
+            leader, r = ordered[0], rows[ordered[0]]
+            record = f"W{r['w']} D{r['d']} L{r['l']}" if r["d"] else f"W{r['w']} L{r['l']}"
+            sentence = f"{self.names.get(leader, '?')} leads on {r['pts']} points ({record})"
+            prev_leaders = [e for e, rk in prev_ranks.items() if rk == 1]
+            if prev_leaders and leader not in prev_leaders and gw > 1:
+                sentence = f"{self.names.get(leader, '?')} is the new leader on {r['pts']} points ({record})"
+                self.stories.append(Story(60, f"{self.names.get(leader, '?')} takes over at the top of the {label}",
+                                          f"{self.names.get(leader, '?')} leads the {label}",
+                                          self.names.get(leader, '?'), label))
+            s.paragraphs.append(sentence + ".")
+
+        upsets = [d for d in decided if d["went"] in prev_ranks and d["lent"] in prev_ranks
+                  and prev_ranks[d["went"]] - prev_ranks[d["lent"]] >= 5] if gw > 1 else []
+        if upsets:
+            u = max(upsets, key=lambda d: prev_ranks[d["went"]] - prev_ranks[d["lent"]])
+            wr, lr = prev_ranks[u["went"]], prev_ranks[u["lent"]]
+            who = "leader" if lr == 1 else ordinal(lr) + "-placed"
+            s.paragraphs.append(f"{u['winner']}, {ordinal(wr)} going into the week, beat {who} "
+                                f"{u['loser']} {u['wpts']}-{u['lpts']}.")
+            self.stories.append(Story(50 + (wr - lr) * 2,
+                                      f"{u['winner']} beats {label} {who} {u['loser']}",
+                                      f"{u['winner']} beats {who} {u['loser']}",
+                                      f"{u['winner']} {u['loser']}", label))
+        elif decided:
+            big = max(decided, key=lambda d: d["margin"])
+            if big["margin"] >= 15:
+                s.paragraphs.append(f"Biggest win: {big['winner']} by {big['margin']} against {big['loser']}.")
+
+        # losing / winning runs
+        seqs = defaultdict(list)
         for mt in sorted(matches, key=lambda m: m["event"]):
             if mt["event"] > gw:
                 continue
             for side, other in (("1", "2"), ("2", "1")):
                 e = mt[f"entry_{side}_entry"]
-                if e is None:
-                    continue
-                a, b = mt[f"entry_{side}_points"], mt[f"entry_{other}_points"]
-                results[e].append("W" if a > b else "D" if a == b else "L")
-        def streak(seq, ok):
+                if e is not None:
+                    a, b = mt[f"entry_{side}_points"], mt[f"entry_{other}_points"]
+                    seqs[e].append("W" if a > b else "D" if a == b else "L")
+
+        def run(seq, kind):
             n = 0
             for r in reversed(seq):
-                if r not in ok:
+                if r != kind:
                     break
                 n += 1
             return n
-        wins = {e: streak(r, "W") for e, r in results.items()}
-        losses = {e: streak(r, "L") for e, r in results.items()}
-        if wins and max(wins.values()) >= 3:
-            top = max(wins.values())
-            s.lines.append(f"🔥 {join_names(self.names.get(e, '?') for e, v in wins.items() if v == top)}: "
-                           f"**{top} wins on the bounce**.")
-        if losses and max(losses.values()) >= 3:
-            top = max(losses.values())
-            s.lines.append(f"🧊 {join_names(self.names.get(e, '?') for e, v in losses.items() if v == top)}: "
-                           f"**{top} defeats in a row**. Someone check on them.")
-
-        if ranks:
-            ordered = sorted(ranks, key=lambda e: ranks[e])
-            leader = ordered[0]
-            r = rows[leader]
-            s.lines.append(f"👑 Top of the table: **{self.names.get(leader, '?')}** "
-                           f"({r['pts']} pts, W{r['w']} D{r['d']} L{r['l']}). "
-                           f"Propping it up: {self.names.get(ordered[-1], '?')} "
-                           f"({rows[ordered[-1]]['pts']} pts).")
+        for kind, word in (("W", "won"), ("L", "lost")):
+            runs = {e: run(seq, kind) for e, seq in seqs.items()}
+            top = max(runs.values(), default=0)
+            if top >= 5:
+                who = join_names(self.names.get(e, "?") for e, v in runs.items() if v == top)
+                s.paragraphs.append(f"{who} {'have' if ' and ' in who else 'has'} {word} "
+                                    f"{words(top)} in a row.")
+                if kind == "L":
+                    self.stories.append(Story(30 + top * 2,
+                                              f"{who}'s losing run in the {label} reaches {words(top)}",
+                                              f"{who} loses again", who, label))
         return s
 
-    def season_section(self):
+    # -- also this week --
+    def collect_notes(self):
         gw = self.gw
-        s = Section("📜 Season So Far")
-        motw_count, spoon_count = Counter(), Counter()
-        best = worst = None
-        for g in range(1, gw + 1):
-            sc = {m.entry: m.net(g) for m in self.managers if g in m.history}
-            if len(sc) < 2:
+        caps = self.caps
+
+        # chips (detail for the first two, the rest grouped into one line)
+        chip_users = [m for m in self.active if (m.picks or {}).get("active_chip")]
+        if len(chip_users) > 2:
+            self.note(8.5, "Chips played: " + join_names(
+                f"{m.name} ({CHIP_NAMES.get(m.picks['active_chip'], m.picks['active_chip']).split(' ', 1)[-1]})"
+                for m in chip_users) + ".")
+            chip_users = []
+        for m in chip_users:
+            chip = m.picks["active_chip"]
+            if chip == "3xc":
+                cap = self.captain_of(m)
+                if cap:
+                    self.note(9, f"{m.name} used a Triple Captain on {self.pname(cap[0])}, "
+                                 f"worth {cap[1]} points.")
+            elif chip == "bboost":
+                bench = sum(self.pts(p["element"]) for p in m.picks["picks"] if p.get("position", 0) > 11)
+                self.note(9, f"{m.name} played a Bench Boost; the bench added {bench} "
+                             f"{plural(bench, 'point')}.")
+            else:
+                self.note(8, f"{m.name} played {CHIP_NAMES.get(chip, chip)} and scored {m.net(gw)}.")
+
+        # captains
+        if caps:
+            best = max(c[1] for c in caps.values())
+            worst = min(c[1] for c in caps.values())
+            best_e = [e for e, c in caps.items() if c[1] == best]
+            worst_e = [e for e, c in caps.items() if c[1] == worst]
+            if len(best_e) <= 3:
+                self.note(7, f"Best captain pick: {self.pname(caps[best_e[0]][0])} for "
+                             f"{join_names(self.names[e] for e in best_e)} ({best} points).")
+            if worst < best and len(worst_e) <= 3:
+                self.note(6, f"Worst captain pick: {self.pname(caps[worst_e[0]][0])} for "
+                             f"{join_names(self.names[e] for e in worst_e)} ({worst} points).")
+            if worst <= 0 and len(worst_e) <= 2:
+                self.stories.append(Story(40, f"{self.pname(caps[worst_e[0]][0])} captaincy costs "
+                                              f"{join_names(self.names[e] for e in worst_e)}",
+                                          f"{self.pname(caps[worst_e[0]][0])} lets down "
+                                          f"{join_names(self.names[e] for e in worst_e)}",
+                                          join_names(self.names[e] for e in worst_e), "captain"))
+
+        # differential
+        squads, xis = {}, {}
+        for m in self.active:
+            picks = (m.picks or {}).get("picks", [])
+            if not picks:
                 continue
-            hi, lo = max(sc.values()), min(sc.values())
-            for e, v in sc.items():
-                if v == hi:
-                    motw_count[e] += 1
-                if v == lo:
-                    spoon_count[e] += 1
-                if best is None or v > best[0]:
-                    best = (v, e, g)
-                if worst is None or v < worst[0]:
-                    worst = (v, e, g)
-        by_entry = {m.entry: m for m in self.managers}
-        if best:
-            s.facts.append(("Highest GW score", f"{best[0]} - {by_entry[best[1]].name} (GW{best[2]})"))
-            s.facts.append(("Lowest GW score", f"{worst[0]} - {by_entry[worst[1]].name} (GW{worst[2]})"))
-        if motw_count:
-            top = max(motw_count.values())
-            s.facts.append(("Most Manager of the Week wins",
-                            f"{join_names(by_entry[e].name for e, c in motw_count.items() if c == top)} ({top})"))
-        if spoon_count:
-            top = max(spoon_count.values())
-            s.facts.append(("Most Wooden Spoons",
-                            f"{join_names(by_entry[e].name for e, c in spoon_count.items() if c == top)} ({top})"))
-        hits = {m.entry: sum(r.get("event_transfers_cost", 0) for g, r in m.history.items() if g <= gw)
-                for m in self.active}
-        if hits and max(hits.values()) > 0:
-            top = max(hits.values())
-            s.facts.append(("Most points spent on hits",
-                            f"{join_names(by_entry[e].name for e, v in hits.items() if v == top)} (-{top})"))
-        rich = max(self.active, key=lambda m: m.history[gw].get("value", 0))
-        if rich.history[gw].get("value"):
-            s.facts.append(("Most valuable squad", f"{rich.name} (£{rich.history[gw]['value'] / 10:.1f}m)"))
-        return s
+            squads[m.entry] = {p["element"] for p in picks}
+            xi = {p["element"] for p in picks if p.get("position", 0) <= 11}
+            for sub in m.picks.get("automatic_subs", []):
+                xi.discard(sub["element_out"])
+                xi.add(sub["element_in"])
+            if m.picks.get("active_chip") == "bboost":
+                xi = set(squads[m.entry])
+            xis[m.entry] = xi
+        if len(squads) > 2:
+            owners = Counter(el for sq in squads.values() for el in sq)
+            diffs = [(self.pts(el), el, e) for e, xi in xis.items() for el in xi if owners[el] == 1]
+            if diffs:
+                pts, el, e = max(diffs)
+                if pts >= 8:
+                    self.note(5, f"{self.names[e]} was the only manager with {self.pname(el)}, "
+                                 f"who scored {pts}.")
+
+        # transfers and hits
+        singles, hits = [], []
+        for m in self.active:
+            if (m.picks or {}).get("active_chip") in ("wildcard", "freehit"):
+                continue
+            delta = 0
+            for t in m.transfers:
+                d = self.pts(t["element_in"]) - self.pts(t["element_out"])
+                delta += d
+                singles.append((d, m, t))
+            cost = m.history[gw].get("event_transfers_cost", 0)
+            if cost and m.transfers:
+                hits.append((delta - cost, cost, m))
+        if len(hits) == 1:
+            net, cost, m = hits[0]
+            outcome = (f"came out {net} {plural(net, 'point')} ahead" if net > 0 else
+                       "broke even" if net == 0 else
+                       f"ended {-net} {plural(-net, 'point')} worse off")
+            self.note(4, f"{m.name} took a -{cost} hit and {outcome}.")
+        elif hits:
+            paid = [m.name for net, _c, m in hits if net > 0]
+            self.note(4, f"{words(len(hits)).capitalize()} managers took points hits; "
+                         + (f"only {join_names(paid)} came out ahead." if paid else "none of them paid off."))
+        if singles:
+            d, m, t = max(singles, key=lambda x: x[0])
+            if d >= 5:
+                self.note(4.5, f"Best transfer: {m.name} brought in {self.pname(t['element_in'])} for "
+                               f"{self.pname(t['element_out'])}, a gain of {d}.")
+
+        # bench
+        benches = [(m.history[gw].get("points_on_bench", 0), m) for m in self.active
+                   if (m.picks or {}).get("active_chip") != "bboost"]
+        if benches:
+            top = max(b for b, _ in benches)
+            who = [m for b, m in benches if b == top]
+            if top >= 10 and len(who) <= 3:
+                each = " each" if len(who) > 1 else ""
+                self.note(3, f"{join_names(m.name for m in who)}{each} left {top} points on the bench.")
+
+        # form
+        weeks = [g for g in range(gw - FORM_WEEKS + 1, gw + 1) if g >= 1]
+        if len(weeks) == FORM_WEEKS:
+            form = {m.entry: sum(m.net(g) for g in weeks) for m in self.active
+                    if all(g in m.history for g in weeks)}
+            if len(form) > 2:
+                e, p = max(form.items(), key=lambda kv: kv[1])
+                self.note(2, f"Best form: {self.names[e]}, with {p} points over the last "
+                             f"{words(FORM_WEEKS)} gameweeks.")
+
+    def notes_section(self):
+        notes = [t for _p, t in sorted(self.notes, key=lambda x: -x[0])][:MAX_NOTES]
+        return Section("Also this week", bullets=notes)
 
 
 def build_report(client, config, gameweek=None):
