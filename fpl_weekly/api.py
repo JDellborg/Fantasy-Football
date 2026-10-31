@@ -48,6 +48,9 @@ class FPLClient:
     def bootstrap(self):
         return self.get("/bootstrap-static/")
 
+    def event_status(self):
+        return self.get("/event-status/")
+
     def live(self, gw):
         return self.get(f"/event/{gw}/live/")
 

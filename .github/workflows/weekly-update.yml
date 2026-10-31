@@ -1,11 +1,11 @@
 name: FPL weekly update
 
 on:
-  # Runs daily. Checks every morning at 08:00 UTC (9am UK in summer, 8am in winter).
-  # It only publishes once a gameweek is fully finished (bonus points confirmed)
-  # and hasn't been posted yet - so it posts once per gameweek, automatically.
+  # Checks every hour from 08:00 to 12:00 UTC, every day. It only publishes once a
+  # gameweek is finished AND FPL has finished updating the league tables, and only
+  # if that gameweek hasn't been posted yet - so it posts once per gameweek.
   schedule:
-    - cron: "0 8 * * *"
+    - cron: "7 8-12 * * *"
   # Lets you run it by hand from the Actions tab.
   workflow_dispatch:
     inputs:

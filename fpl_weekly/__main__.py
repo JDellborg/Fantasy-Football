@@ -40,6 +40,27 @@ def set_output(**values):
                 f.write(f"{k}={v}\n")
 
 
+def tables_ready(client, config, gw):
+    """True once FPL has finished updating league tables for this gameweek.
+
+    1. FPL's own status flag must say the leagues are "Updated" and bonus points added.
+    2. Every manager's total in the classic league table must match their history total.
+    """
+    status = client.event_status()
+    rows = [r for r in status.get("status", []) if r.get("event") == gw]
+    if rows:  # gw is still the 'current' gameweek, so its status is reported
+        if not all(r.get("bonus_added") for r in rows):
+            return False, "bonus points not added yet"
+        if status.get("leagues") != "Updated":
+            return False, f"league tables still updating (status: {status.get('leagues') or 'pending'!r})"
+        _league, standings = client.classic_standings(config["classic_league_id"])
+        for r in standings:
+            hist = {h["event"]: h for h in client.entry_history(r["entry"]).get("current", [])}
+            if gw in hist and hist[gw]["total_points"] != r["total"]:
+                return False, f"league table total for {r['player_name']} not updated yet"
+    return True, "league tables updated"
+
+
 def build(args):
     config = json.loads(Path(args.config).read_text())
     client = FPLClient()
@@ -50,6 +71,12 @@ def build(args):
             print(f"No new finished gameweek (latest final: {latest}, last posted: {last_posted()}).")
             set_output(publish="false")
             return 0
+        ready, reason = tables_ready(client, config, latest)
+        if not ready:
+            print(f"Gameweek {latest} is finished but not ready to post: {reason}. Will try again later.")
+            set_output(publish="false")
+            return 0
+        print(f"Gameweek {latest}: {reason}.")
 
     report = build_report(client, config, args.gameweek)
     page = write_site(report, SITE, config.get("accent_color", "#ff6b1a"))

@@ -20,8 +20,10 @@ of the week, a one-paragraph summary, the week in numbers, the classic table
 (top five and bottom two), results from both H2H leagues, and up to five short
 notes (chips, captains, transfers, hits, bench points, form).
 
-**When it posts:** GitHub checks every morning at 08:00 UTC. As soon as a
-gameweek is completely finished (bonus points confirmed), it posts once.
+**When it posts:** GitHub checks every hour from 08:00 to 12:00 UTC. It posts
+once per gameweek, at the first check after the gameweek is finished, bonus
+points are added **and** FPL has finished updating the league tables. If the
+tables aren't ready by 12:00 UTC, it tries again the next day.
 
 ---
 

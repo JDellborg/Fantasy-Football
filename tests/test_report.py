@@ -220,3 +220,39 @@ class InsightsTest(unittest.TestCase):
         self.assertEqual(len(kinds), len(set(kinds)))
         self.assertLessEqual(len(section.insights), 6)
         self.assertTrue(report.card_insight)
+
+
+class ReadinessTest(unittest.TestCase):
+    class Stub:
+        def __init__(self, leagues="Updated", bonus=True, table_total=100, gw=9):
+            self.leagues, self.bonus, self.table_total, self.gw = leagues, bonus, table_total, gw
+
+        def event_status(self):
+            return {"status": [{"event": self.gw, "bonus_added": self.bonus}], "leagues": self.leagues}
+
+        def classic_standings(self, league_id):
+            return {}, [{"entry": 1, "player_name": "Alex Tester", "total": self.table_total}]
+
+        def entry_history(self, entry):
+            return {"current": [{"event": 9, "total_points": 100}]}
+
+    def check(self, **kw):
+        from fpl_weekly.__main__ import tables_ready
+        return tables_ready(self.Stub(**kw), {"classic_league_id": 1}, 9)[0]
+
+    def test_ready(self):
+        self.assertTrue(self.check())
+
+    def test_leagues_still_updating(self):
+        self.assertFalse(self.check(leagues=""))
+        self.assertFalse(self.check(leagues="Updating"))
+
+    def test_bonus_missing(self):
+        self.assertFalse(self.check(bonus=False))
+
+    def test_table_total_not_matching(self):
+        self.assertFalse(self.check(table_total=90))
+
+    def test_older_gameweek_is_ready(self):
+        # status already reports a later gameweek -> the one we want is long done
+        self.assertTrue(self.check(leagues="", gw=10))
