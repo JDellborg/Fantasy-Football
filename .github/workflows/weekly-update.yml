@@ -10,9 +10,9 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "preview = nothing public | page = update the web page only | post = web page + Teams"
+        description: "preview = nothing public | page = web page only | test = web page + test chat | post = web page + Teams"
         type: choice
-        options: [preview, page, post]
+        options: [preview, page, test, post]
         default: preview
       gameweek:
         description: "Gameweek number (leave blank for the latest finished one)"
@@ -84,6 +84,12 @@ jobs:
         env:
           TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
         run: python -m fpl_weekly post
+
+      - name: Post to the test chat
+        if: steps.build.outputs.publish == 'true' && env.MODE == 'test'
+        env:
+          TEAMS_TEST_WEBHOOK_URL: ${{ secrets.TEAMS_TEST_WEBHOOK_URL }}
+        run: python -m fpl_weekly post --test
 
       - name: Save the web page archive and posted gameweek
         if: steps.build.outputs.publish == 'true' && env.MODE != 'preview'

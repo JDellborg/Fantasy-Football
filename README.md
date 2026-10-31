@@ -66,7 +66,20 @@ your Teams chat within seconds. After that, it posts automatically every gamewee
 
 ---
 
+## Previewing
+
+- **The Teams card:** every run's summary page (Actions → click the run) starts
+  with a "Teams card preview". For the real thing, set up a test chat (below)
+  and run with **mode = `test`**.
+- **Test chat:** in Teams, start a chat with just yourself (or a group with one
+  colleague), add the same "Send webhook alerts to a chat" workflow there, and save its
+  link as a GitHub secret called `TEAMS_TEST_WEBHOOK_URL`.
+- **The web page:** run with **mode = `page`**, then open the site link above.
+
 ## Customising
+
+- **Logo:** upload your own `logo.svg` or `logo.png` into the `site/` folder and
+  it replaces the initials badge in the page header.
 
 - **Nicknames:** in `config.json`, map a manager's FPL team ID to a nickname, e.g.
   `"nicknames": { "1234567": "The Gaffer" }`. You can find a manager's team ID

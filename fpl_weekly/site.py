@@ -21,30 +21,32 @@ FONT_FILES = [  # (file name, weight, style) - any that exist in site/fonts are 
 
 CSS = """
 :root{
-  --paper:#f4f3ee; --surface:#ffffff; --ink:#0f1118; --muted:#6b6f7b; --line:#e4e2da;
-  --accent:#c8f03c; --accent-ink:#0f1118; --up:#0f8a4f; --down:#c2412d; --bar:#d9d7cf;
+  color-scheme:dark;
+  --paper:#07080d; --surface:#10131b; --surface-2:#161a24; --ink:#f1f0ea; --muted:#8c92a0;
+  --line:#212634; --accent:#c8f03c; --accent-ink:#0a0c10; --up:#4fd68f; --down:#ff6b57;
+  --bar:#262c3a;
   --font:"New Hero","Montserrat",system-ui,-apple-system,"Segoe UI",sans-serif;
-}
-@media (prefers-color-scheme:dark){
-  :root:not([data-theme="light"]){
-    --paper:#0d0f15; --surface:#161922; --ink:#eeede8; --muted:#9a9eaa; --line:#262a35;
-    --accent:#c8f03c; --accent-ink:#0f1118; --up:#4cc98a; --down:#ff7a63; --bar:#2b303c;
-  }
-}
-:root[data-theme="dark"]{
-  --paper:#0d0f15; --surface:#161922; --ink:#eeede8; --muted:#9a9eaa; --line:#262a35;
-  --accent:#c8f03c; --accent-ink:#0f1118; --up:#4cc98a; --down:#ff7a63; --bar:#2b303c;
 }
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--font);
   font-size:16px;line-height:1.55;font-feature-settings:"tnum" 1}
 .wrap{max-width:1080px;margin:0 auto;padding:0 16px}
-header.top{border-bottom:1px solid var(--line)}
+header.top{border-bottom:1px solid var(--line);background:rgba(7,8,13,.85)}
+.brand{display:flex;align-items:center;gap:12px;min-width:0}
+.brand span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.badge{flex:none;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;
+  background:var(--accent);color:var(--accent-ink);font-weight:900;font-size:13px;letter-spacing:.02em}
+.logo{flex:none;height:38px;width:auto;display:block}
+.hero{position:relative}
+.hero::before{content:"";position:absolute;inset:-40px -30vw auto;height:420px;z-index:-1;pointer-events:none;
+  background:radial-gradient(40% 60% at 20% 30%,rgba(200,240,60,.13),transparent 70%),
+             radial-gradient(35% 55% at 85% 10%,rgba(120,90,255,.16),transparent 70%)}
+main{overflow:hidden}
 header.top .wrap{display:flex;justify-content:space-between;align-items:center;gap:12px;
   padding-top:14px;padding-bottom:14px;font-size:13px;font-weight:700;letter-spacing:.12em;
   text-transform:uppercase}
-header.top .gw{background:var(--ink);color:var(--paper);padding:4px 10px;border-radius:999px;
+header.top .gw{background:var(--accent);color:var(--accent-ink);padding:4px 10px;border-radius:999px;
   letter-spacing:.08em;white-space:nowrap}
 .hero{padding:48px 0 28px}
 .hero h1{font-size:clamp(2.1rem,6.2vw,4.4rem);line-height:1.02;letter-spacing:-.025em;
@@ -66,16 +68,17 @@ section.block p{margin:6px 0 0;color:var(--ink);opacity:.86}
 .grid section.block{margin-bottom:0}
 .table{width:100%;border-collapse:collapse;margin-top:14px;font-size:15px}
 .table th{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
-  text-align:left;padding:0 8px 8px;border-bottom:2px solid var(--ink)}
+  text-align:left;padding:0 8px 8px;border-bottom:1px solid var(--muted)}
 .table td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
 .table tr:last-child td{border-bottom:0}
 .table .r{text-align:right}.table .c{text-align:center}
 .table td.pos{font-weight:800;width:2.5em}
-.table tr.lead td{background:color-mix(in srgb,var(--accent) 35%,transparent)}
+.table tr.lead td{background:rgba(200,240,60,.12)}
+.table tr.lead td.pos{color:var(--accent)}
 .table .mv{font-size:13px;font-weight:700;white-space:nowrap}
 .mv.up{color:var(--up)}.mv.down{color:var(--down)}.mv.same{color:var(--muted)}
 .team{color:var(--muted);font-size:14px}
-.score{display:inline-block;background:var(--ink);color:var(--paper);font-weight:800;border-radius:8px;
+.score{display:inline-block;background:var(--surface-2);color:var(--ink);border:1px solid var(--line);font-weight:800;border-radius:8px;
   padding:3px 10px;font-size:14px;white-space:nowrap}
 .scroll{overflow-x:auto}
 .chart{margin-top:16px;position:relative}
@@ -100,7 +103,7 @@ footer{padding:28px 0 48px;color:var(--muted);font-size:14px}
 .archive{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 18px}
 .archive a{color:var(--ink);text-decoration:none;border:1px solid var(--line);background:var(--surface);
   padding:5px 12px;border-radius:999px;font-weight:700;font-size:13px}
-.archive a.cur{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.archive a.cur{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 @media (max-width:560px){
   .hero{padding:32px 0 20px}
   section.block{padding:18px 14px 12px}
@@ -202,6 +205,16 @@ def _font_css(site_dir, prefix):
     return "\n".join(rules)
 
 
+def _brand(site_dir, prefix, league_name):
+    """Your own logo if site/logo.svg or site/logo.png exists, otherwise an initials badge."""
+    for name in ("logo.svg", "logo.png"):
+        if (Path(site_dir) / name).exists():
+            return f'<img class="logo" src="{prefix}{name}" alt="">'
+    words = [w for w in re.findall(r"[A-Za-z0-9]+", league_name) if w.lower() not in ("the", "of", "and")]
+    initials = "".join(w[0] for w in words[:3]).upper() or "FPL"
+    return f'<span class="badge" aria-hidden="true">{html.escape(initials)}</span>'
+
+
 def render_page(report, site_dir, prefix, archive):
     week = report.sections[0] if report.sections else None
     tiles = ""
@@ -251,7 +264,7 @@ def render_page(report, site_dir, prefix, archive):
 </style>
 </head>
 <body>
-<header class="top"><div class="wrap"><span>{html.escape(report.league_name)}</span>
+<header class="top"><div class="wrap"><div class="brand">{_brand(site_dir, prefix, report.league_name)}<span>{html.escape(report.league_name)}</span></div>
 <span class="gw">Gameweek {report.gameweek}</span></div></header>
 <main class="wrap">
 <div class="hero">

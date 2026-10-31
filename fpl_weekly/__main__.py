@@ -14,7 +14,7 @@ import urllib.request
 from pathlib import Path
 
 from .api import FPLClient
-from .render import to_markdown, to_teams_payload
+from .render import to_markdown, to_markdown_teaser, to_teams_payload
 from .site import write_site
 from .stats import build_report, latest_final_gameweek
 
@@ -67,16 +67,19 @@ def build(args):
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:
         with open(summary, "a", encoding="utf-8") as f:
-            f.write(markdown + "\n")
+            f.write(to_markdown_teaser(report, link))
+            f.write("\n<details><summary><b>Full web page content (click to expand)</b></summary>\n\n")
+            f.write(markdown + "\n\n</details>\n")
     print(markdown)
     set_output(publish="true", gameweek=report.gameweek)
     return 0
 
 
-def post(_args):
-    url = os.environ.get("TEAMS_WEBHOOK_URL")
+def post(args):
+    secret = "TEAMS_TEST_WEBHOOK_URL" if args.test else "TEAMS_WEBHOOK_URL"
+    url = os.environ.get(secret)
     if not url:
-        print("ERROR: TEAMS_WEBHOOK_URL is not set - add it as a GitHub secret.", file=sys.stderr)
+        print(f"ERROR: {secret} is not set - add it as a GitHub secret.", file=sys.stderr)
         return 1
     payload = json.loads((OUT / "teams_payload.json").read_text())
     gameweek = int((OUT / "gameweek.txt").read_text())
@@ -85,6 +88,9 @@ def post(_args):
     with urllib.request.urlopen(req, timeout=30) as resp:
         if resp.status >= 300:
             raise RuntimeError(f"Teams returned HTTP {resp.status}")
+    if args.test:
+        print(f"Posted gameweek {gameweek} to the TEST chat.")
+        return 0
     STATE_FILE.parent.mkdir(exist_ok=True)
     STATE_FILE.write_text(f"{max(gameweek, last_posted())}\n")
     print(f"Posted gameweek {gameweek} to Teams.")
@@ -99,7 +105,8 @@ def main(argv=None):
     b.add_argument("--only-if-new", action="store_true",
                    help="do nothing unless a newer gameweek has finished since the last post")
     b.add_argument("--config", default=str(ROOT / "config.json"))
-    sub.add_parser("post", help="post the built card to Teams")
+    p = sub.add_parser("post", help="post the built card to Teams")
+    p.add_argument("--test", action="store_true", help="post to the test chat (TEAMS_TEST_WEBHOOK_URL)")
     args = ap.parse_args(argv)
     return build(args) if args.command == "build" else post(args)
 

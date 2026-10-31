@@ -125,3 +125,15 @@ def to_markdown(report):
         if section.bullets:
             out.append("")
     return "\n".join(out)
+
+
+def to_markdown_teaser(report, link=None):
+    """What the Teams card will show, written as Markdown for the GitHub run summary."""
+    out = ["## 💬 Teams card preview", "",
+           f"> {report.league_name.upper()} · GAMEWEEK {report.gameweek}", ">",
+           f"> ### {report.headline}", ">", f"> {report.standfirst}", ">"]
+    for label, value in report.key_facts:
+        out.append(f"> **{label}:** {value}  ")
+    if link:
+        out += [">", f"> **[ Read the full report ]({link})**"]
+    return "\n".join(out) + "\n"
