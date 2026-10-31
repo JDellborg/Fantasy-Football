@@ -92,7 +92,7 @@ jobs:
         run: python -m fpl_weekly post --test
 
       - name: Save the web page archive and posted gameweek
-        if: steps.build.outputs.publish == 'true' && env.MODE != 'preview'
+        if: always() && steps.build.outputs.publish == 'true' && env.MODE != 'preview'
         run: |
           git add site/ state/
           if ! git diff --cached --quiet; then

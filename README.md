@@ -86,9 +86,7 @@ your Teams chat within seconds. After that, it posts automatically every gamewee
   in the web address when you click their team on the FPL site.
 - **Length:** the numbers at the top of `fpl_weekly/stats.py` control how many
   table rows (`CLASSIC_TOP`, `CLASSIC_BOTTOM`) and notes (`MAX_NOTES`) are shown.
-- **Fonts:** the web page uses New Hero if its .woff2 files are in `site/fonts/`
-  (see the note in that folder); otherwise Montserrat. Teams cards can't use
-  custom fonts.
+- **Fonts:** the web page uses Montserrat. Teams cards always use the Teams font.
 - **Re-send an older gameweek:** run the workflow manually and type a gameweek number.
 
 ## Troubleshooting

@@ -3,7 +3,6 @@
 Output layout (inside site/):
     index.html          latest gameweek
     gw/<n>.html         one page per gameweek (the archive)
-    fonts/              put the New Hero .woff2 files here (see README)
 """
 
 import html
@@ -11,13 +10,6 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
-FONT_FILES = [  # (file name, weight, style) - any that exist in site/fonts are used
-    ("NewHero-Regular.woff2", 400, "normal"),
-    ("NewHero-Medium.woff2", 500, "normal"),
-    ("NewHero-Bold.woff2", 700, "normal"),
-    ("NewHero-ExtraBold.woff2", 800, "normal"),
-    ("NewHero-Black.woff2", 900, "normal"),
-]
 
 CSS = """
 :root{
@@ -25,7 +17,7 @@ CSS = """
   --paper:#07080d; --surface:#10131b; --surface-2:#161a24; --ink:#f1f0ea; --muted:#8c92a0;
   --line:#212634; --accent:#c8f03c; --accent-ink:#0a0c10; --up:#4fd68f; --down:#ff6b57;
   --bar:#262c3a;
-  --font:"New Hero","Montserrat",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font:"Montserrat",system-ui,-apple-system,"Segoe UI",sans-serif;
 }
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
@@ -206,15 +198,6 @@ def _section(s, wide=False):
     return f'<section class="block">{"".join(parts)}</section>'
 
 
-def _font_css(site_dir, prefix):
-    rules = []
-    for name, weight, style in FONT_FILES:
-        if (site_dir / "fonts" / name).exists():
-            rules.append(f'@font-face{{font-family:"New Hero";src:url("{prefix}fonts/{name}") format("woff2");'
-                         f"font-weight:{weight};font-style:{style};font-display:swap}}")
-    return "\n".join(rules)
-
-
 def _brand(site_dir, prefix, league_name):
     """Your own logo if site/logo.svg or site/logo.png exists, otherwise an initials badge."""
     for name in ("logo.svg", "logo.png"):
@@ -269,7 +252,6 @@ def render_page(report, site_dir, prefix, archive):
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-{_font_css(site_dir, prefix)}
 {CSS}
 </style>
 </head>
@@ -298,7 +280,6 @@ Data from the official Fantasy Premier League game. Updated automatically after 
 def write_site(report, site_dir):
     site_dir = Path(site_dir)
     (site_dir / "gw").mkdir(parents=True, exist_ok=True)
-    (site_dir / "fonts").mkdir(exist_ok=True)
     (site_dir / ".nojekyll").write_text("")
     archive = {int(p.stem) for p in (site_dir / "gw").glob("*.html") if p.stem.isdigit()}
     archive.add(report.gameweek)
