@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 72" role="img" aria-label="League crest">
+  <path d="M32 2 L60 10 V34 C60 52 47 64 32 70 C17 64 4 52 4 34 V10 Z" fill="#10131b" stroke="#c8f03c" stroke-width="3" stroke-linejoin="round"/>
+  <circle cx="32" cy="30" r="15" fill="#f1f0ea"/>
+  <g stroke="#0a0c10" stroke-width="1.6" stroke-linecap="round">
+    <line x1="32" y1="24.5" x2="32" y2="15.5"/>
+    <line x1="37.2" y1="28.3" x2="45.6" y2="25.6"/>
+    <line x1="35.2" y1="34.5" x2="40.4" y2="41.6"/>
+    <line x1="28.8" y1="34.5" x2="23.6" y2="41.6"/>
+    <line x1="26.8" y1="28.3" x2="18.4" y2="25.6"/>
+  </g>
+  <polygon points="32,24.5 37.2,28.3 35.2,34.5 28.8,34.5 26.8,28.3" fill="#0a0c10"/>
+  <polyline points="10,48 29,48 33,42 37,57 42,31 46,51 49,48 54,48" fill="none" stroke="#10131b" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="10,48 29,48 33,42 37,57 42,31 46,51 49,48 54,48" fill="none" stroke="#c8f03c" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

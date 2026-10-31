@@ -3,6 +3,8 @@
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
+from .insights import build_insights
+
 CHIP_NAMES = {
     "wildcard": "a Wildcard",
     "freehit": "a Free Hit",
@@ -33,6 +35,7 @@ class Section:
     bullets: list = field(default_factory=list)
     full_table: Table = None         # longer version for the web page
     chart: list = None               # [(name, value, tag)] bars for the web page
+    insights: list = None            # [Insight] for the "behind the numbers" section
     chart_avg: float = None
 
 
@@ -44,6 +47,7 @@ class Report:
     league_name: str
     sections: list
     key_facts: list = field(default_factory=list)   # [(label, value)] for the Teams teaser
+    card_insight: str = None                         # one deeper stat for the Teams teaser
 
 
 @dataclass
@@ -139,6 +143,8 @@ class ReportBuilder:
         if not self.gw:
             raise SystemExit("No finished gameweek yet - nothing to report.")
         self.players = {p["id"]: p for p in boot["elements"]}
+        self.total_players = boot.get("total_players")
+        self.squads, self.xis, self.caps = {}, {}, {}
         self.stories = []
         self.notes = []          # (priority, text) for "Also this week"
 
@@ -205,8 +211,11 @@ class ReportBuilder:
         sections += [self.extra_section(lg) for lg in self.config.get("extra_leagues", [])
                      if lg.get("id")]
         self.collect_notes()
+        self.insights = build_insights(self)
+        if self.insights:
+            sections.append(Section("Behind the numbers", insights=self.insights[:6]))
         sections.append(self.notes_section())
-        sections = [s for s in sections if s and (s.paragraphs or s.table or s.bullets)]
+        sections = [s for s in sections if s and (s.paragraphs or s.table or s.bullets or s.insights)]
 
         return Report(
             headline=self.headline(),
@@ -215,6 +224,7 @@ class ReportBuilder:
             league_name=self.config.get("title") or self.league["name"],
             sections=sections,
             key_facts=self.key_facts,
+            card_insight=self.insights[0].text if self.insights else None,
         )
 
     # -- headline --
@@ -271,7 +281,7 @@ class ReportBuilder:
         s.chart = [(m.name, m.net(gw), "top" if m.net(gw) == self.top else
                     "bottom" if m.net(gw) == self.bottom else "") for m in ranked]
         s.chart_avg = self.league_avg
-        self.key_facts = rows[:2]
+        self.key_facts = rows[:1]
 
         avg = self.league_avg
         if self.top >= max(avg + 20, 75):
@@ -632,7 +642,7 @@ class ReportBuilder:
                                           join_names(self.names[e] for e in worst_e), "captain"))
 
         # differential
-        squads, xis = {}, {}
+        squads, xis = self.squads, self.xis
         for m in self.active:
             picks = (m.picks or {}).get("picks", [])
             if not picks:

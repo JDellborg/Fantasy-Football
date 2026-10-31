@@ -99,6 +99,11 @@ ol.notes li{counter-increment:n;display:grid;grid-template-columns:2.2em 1fr;gap
   border-bottom:1px solid var(--line)}
 ol.notes li:last-child{border-bottom:0}
 ol.notes li::before{content:counter(n,decimal-leading-zero);font-weight:800;color:var(--muted)}
+.insights{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:14px;margin-top:14px}
+.ins{background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:16px 16px 14px}
+.ins .stat{font-size:2rem;font-weight:800;letter-spacing:-.02em;line-height:1.1;color:var(--accent)}
+.ins .lbl{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-top:4px}
+.ins p{font-size:14.5px;margin-top:8px}
 footer{padding:28px 0 48px;color:var(--muted);font-size:14px}
 .archive{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 18px}
 .archive a{color:var(--ink);text-decoration:none;border:1px solid var(--line);background:var(--surface);
@@ -190,6 +195,11 @@ def _section(s, wide=False):
     table = s.full_table or s.table
     if table and table.headers:
         parts.append(_table(table))
+    if s.insights:
+        parts.append('<div class="insights">' + "".join(
+            f'<div class="ins"><div class="stat">{html.escape(i.stat)}</div>'
+            f'<div class="lbl">{html.escape(i.label)}</div><p>{_inline(i.text)}</p></div>'
+            for i in s.insights) + "</div>")
     if s.bullets:
         parts.append('<ol class="notes">' + "".join(f"<li><span>{_inline(b)}</span></li>"
                                                      for b in s.bullets) + "</ol>")
@@ -227,7 +237,7 @@ def render_page(report, site_dir, prefix, archive):
     blocks = []
     pair = []
     for s in rest:
-        if s.chart or (s.full_table and len(s.full_table.rows) > 8) or s.bullets:
+        if s.chart or (s.full_table and len(s.full_table.rows) > 8) or s.bullets or s.insights:
             if pair:
                 blocks.append('<div class="grid">' + "".join(pair) + "</div>")
                 pair = []

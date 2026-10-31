@@ -56,6 +56,10 @@ def to_teaser_card(report, link):
                  "items": [_text(value, weight="Bolder", horizontalAlignment="Right")]},
             ],
         })
+    if report.card_insight:
+        body.append(_text("BEHIND THE NUMBERS", size="Small", weight="Bolder", isSubtle=True,
+                          spacing="Medium", separator=True))
+        body.append(_text(report.card_insight, spacing="Small"))
     return {
         "type": "AdaptiveCard",
         "version": "1.4",
@@ -80,6 +84,8 @@ def to_adaptive_card(report):
             items += _table_rows(section.table)
         for b in section.bullets:
             items.append(_text(f"•  {b}", spacing="Small"))
+        for ins in section.insights or []:
+            items.append(_text(f"**{ins.label} ({ins.stat}).** {ins.text}", spacing="Small"))
         body.append({"type": "Container", "separator": True, "spacing": "Large", "items": items})
     return {
         "type": "AdaptiveCard",
@@ -122,7 +128,9 @@ def to_markdown(report):
             out.append("")
         for b in section.bullets:
             out.append(f"- {b}")
-        if section.bullets:
+        for ins in section.insights or []:
+            out.append(f"- **{ins.label} ({ins.stat}).** {ins.text}")
+        if section.bullets or section.insights:
             out.append("")
     return "\n".join(out)
 
@@ -134,6 +142,8 @@ def to_markdown_teaser(report, link=None):
            f"> ### {report.headline}", ">", f"> {report.standfirst}", ">"]
     for label, value in report.key_facts:
         out.append(f"> **{label}:** {value}  ")
+    if report.card_insight:
+        out += [">", "> **BEHIND THE NUMBERS**  ", f"> {report.card_insight}"]
     if link:
         out += [">", f"> **[ Read the full report ]({link})**"]
     return "\n".join(out) + "\n"

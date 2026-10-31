@@ -210,3 +210,13 @@ class ExtraLeaguesAndSiteTest(unittest.TestCase):
                 raise RuntimeError("boom")
         report = build_report(FakeClient(), EXTRA_CONFIG, extra_clients={"challenge": Broken(), "draft": FakeDraft()})
         self.assertNotIn("FPL Challenge", to_markdown(report))
+
+
+class InsightsTest(unittest.TestCase):
+    def test_insights_present_and_varied(self):
+        report = build_report(FakeClient(n_managers=21), EXTRA_CONFIG, extra_clients=EXTRAS)
+        section = next(s for s in report.sections if s.title == "Behind the numbers")
+        kinds = [i.kind or i.label for i in section.insights]
+        self.assertEqual(len(kinds), len(set(kinds)))
+        self.assertLessEqual(len(section.insights), 6)
+        self.assertTrue(report.card_insight)
