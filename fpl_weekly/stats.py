@@ -528,6 +528,10 @@ class ReportBuilder:
         s.table = Table(["Pos", "Manager", "Round", "Total", "+/-"], table,
                         align=["left", "left", "right", "right", "right"],
                         widths=["auto", "stretch", "auto", "auto", "auto"])
+        if all(r.get("event_total", 0) == 0 for r in rows):   # round not played yet
+            s.table = Table(["Pos", "Manager", "Total", "+/-"], [[c for i, c in enumerate(row) if i != 2]
+                                                                for row in table],
+                            align=["left", "left", "right", "right"], widths=["auto", "stretch", "auto", "auto"])
         leader = min(rows, key=lambda r: r["rank"])
         text = f"{self.other_name(leader['player_name'])} leads on {leader['total']} points."
         best_round = max(r.get("event_total", 0) for r in rows)
