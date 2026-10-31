@@ -17,8 +17,10 @@ past weeks at `/gw/<number>.html`.
 
 **What's in each update:** a news-style headline picked from the biggest story
 of the week, a one-paragraph summary, the week in numbers, the classic table
-(top five and bottom two), results from both H2H leagues, and up to five short
-notes (chips, captains, transfers, hits, bench points, form).
+(top five and bottom two), results from all the leagues, title odds, Manager of
+the Month, "What if?" (everyone's original team, untouched), "Behind the
+numbers" stats, and up to five short notes. Past gameweek data used by "What
+if?" is saved in `state/cache/` so each run fetches less.
 
 **When it posts:** GitHub checks every hour from 08:00 to 12:00 UTC. It posts
 once per gameweek, at the first check after the gameweek is finished, bonus

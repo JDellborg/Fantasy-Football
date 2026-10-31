@@ -78,7 +78,7 @@ def build(args):
             return 0
         print(f"Gameweek {latest}: {reason}.")
 
-    report = build_report(client, config, args.gameweek)
+    report = build_report(client, config, args.gameweek, cache_dir=ROOT / "state" / "cache")
     page = write_site(report, SITE, config.get("accent_color", "#ff6b1a"))
     link = None
     if config.get("site_url"):

@@ -187,9 +187,21 @@ def world_rank(builder):
     return [Insight(1.2 + (2 if pct < 1 else 0), f"Top {pct:.1f}%", "Best in the world", text)]
 
 
+def what_if_insight(builder):
+    results = builder.what_if_results
+    if not results:
+        return []
+    m, whatif, actual, gain, first = min(results, key=lambda r: r[3])
+    if gain > -30:
+        return []
+    return [Insight(3 + -gain / 20, f"{gain:+d}", "Should have stuck",
+                    f"{m.name} would have {whatif} points if they had kept their GW{first} team untouched, "
+                    f"{-gain} more than they actually have ({actual}).", "whatif")]
+
+
 def build_insights(builder):
     items = []
-    for fn in (h2h_luck, captain_points_missed, consistency, catch_up, squad_uniqueness,
+    for fn in (what_if_insight, h2h_luck, captain_points_missed, consistency, catch_up, squad_uniqueness,
                season_bench, world_rank):
         try:
             items += fn(builder)

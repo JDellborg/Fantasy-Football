@@ -281,3 +281,63 @@ class ReadinessTest(unittest.TestCase):
     def test_older_gameweek_is_ready(self):
         # status already reports a later gameweek -> the one we want is long done
         self.assertTrue(self.check(leagues="", gw=10))
+
+
+class WhatIfTest(unittest.TestCase):
+    """Scoring an untouched team with FPL's automatic substitution rules."""
+
+    class B:  # minimal builder: element types only
+        def __init__(self, types):
+            self.players = {e: {"element_type": t} for e, t in types.items()}
+
+    # elements: 1 GK, 2-5 DEF (4), 6-9 MID (4), 10-11 FWD (2) | bench 12 GK, 13 DEF, 14 MID, 15 FWD
+    TYPES = {1: 1, 2: 2, 3: 2, 4: 2, 5: 2, 6: 3, 7: 3, 8: 3, 9: 3, 10: 4, 11: 4,
+             12: 1, 13: 2, 14: 3, 15: 4}
+
+    def team(self, captain=10, vice=6):
+        return {"event": 1, "picks": [[e, e, e == captain, e == vice] for e in range(1, 16)]}
+
+    def live(self, overrides=None):
+        data = {str(e): [2, 90] for e in range(1, 16)}
+        for e, v in (overrides or {}).items():
+            data[str(e)] = v
+        return data
+
+    def score(self, live, **kw):
+        from fpl_weekly.season import score_fixed_team
+        return score_fixed_team(self.B(self.TYPES), self.team(**kw), live)
+
+    def test_everyone_plays(self):
+        self.assertEqual(self.score(self.live()), 11 * 2 + 2)   # XI + captain double
+
+    def test_goalkeeper_sub(self):
+        self.assertEqual(self.score(self.live({1: [0, 0], 12: [6, 90]})), 10 * 2 + 6 + 2)
+
+    def test_outfield_sub_in_bench_order(self):
+        # MID 6 doesn't play; first outfield bench player (DEF 13, 5 pts) comes on (4 DEF->5 DEF ok)
+        self.assertEqual(self.score(self.live({6: [0, 0], 13: [5, 90]}), vice=7), 10 * 2 + 5 + 2)
+
+    def test_formation_respected(self):
+        # both FWDs miss: bench DEF/MID can only replace one (need >=1 FWD), so FWD 15 must come on
+        live = self.live({10: [0, 0], 11: [0, 0], 13: [1, 90], 14: [1, 90], 15: [7, 90]})
+        # XI: 9 starters x2 + FWD15 (7) + DEF13 (1)? -> DEF13 would leave 0 FWD, so first sub must be FWD15
+        # first missing (10): DEF13 -> 0 FWD invalid; MID14 -> invalid; FWD15 -> ok (7)
+        # second missing (11): DEF13 -> FWD count 1 ok (1)
+        self.assertEqual(self.score(live, captain=2, vice=3), 9 * 2 + 7 + 1 + 2)
+
+    def test_vice_captain_takes_over(self):
+        self.assertEqual(self.score(self.live({10: [0, 0], 15: [0, 0], 13: [0, 0], 14: [0, 0]}), vice=6),
+                         10 * 2 + 2)  # captain out, no sub plays, vice (2) doubled
+
+    def test_what_if_section_and_cache(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as d:
+            report = build_report(FakeClient(n_managers=8), CONFIG, cache_dir=d)
+            titles = {s.title: s for s in report.sections}
+            self.assertIn("What if?", titles)
+            self.assertTrue((Path(d) / "live_1.json").exists())
+            self.assertTrue(any(p.name.startswith("first_team_") for p in Path(d).iterdir()))
+            again = build_report(FakeClient(n_managers=8), CONFIG, cache_dir=d)   # from cache
+            self.assertEqual(titles["What if?"].table.rows,
+                             {s.title: s for s in again.sections}["What if?"].table.rows)

@@ -4,7 +4,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
 from .insights import build_insights
-from .season import manager_of_the_month, title_odds
+from .season import manager_of_the_month, title_odds, what_if
 
 CHIP_NAMES = {
     "wildcard": "a Wildcard",
@@ -136,8 +136,10 @@ def make_display_names(player_names, nicknames):
 # --- the report ----------------------------------------------------------------
 
 class ReportBuilder:
-    def __init__(self, client, config, gameweek=None, extra_clients=None):
+    def __init__(self, client, config, gameweek=None, extra_clients=None, cache_dir=None):
         self.client = client
+        self.cache_dir = cache_dir
+        self.what_if_results = []
         self.config = config
         self.extra_clients = extra_clients or {}
         boot = client.bootstrap()
@@ -217,6 +219,7 @@ class ReportBuilder:
         sections += [self.h2h_section(*h) for h in self.h2h]
         sections += [self.extra_section(lg) for lg in self.config.get("extra_leagues", [])
                      if lg.get("id")]
+        sections += self.season_features(what_if)
         self.collect_notes()
         self.insights = build_insights(self)
         if self.insights:
@@ -734,8 +737,8 @@ class ReportBuilder:
         return Section("Also this week", bullets=notes)
 
 
-def build_report(client, config, gameweek=None, extra_clients=None):
+def build_report(client, config, gameweek=None, extra_clients=None, cache_dir=None):
     if extra_clients is None:
         from .api import CHALLENGE_URL, DRAFT_URL, FPLClient
         extra_clients = {"challenge": FPLClient(CHALLENGE_URL), "draft": FPLClient(DRAFT_URL)}
-    return ReportBuilder(client, config, gameweek, extra_clients).build()
+    return ReportBuilder(client, config, gameweek, extra_clients, cache_dir).build()
