@@ -11,11 +11,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
+_ACCENT_CSS = ""
+
 CSS = """
 :root{
   color-scheme:dark;
   --paper:#07080d; --surface:#10131b; --surface-2:#161a24; --ink:#f1f0ea; --muted:#8c92a0;
-  --line:#212634; --accent:#c8f03c; --accent-ink:#0a0c10; --up:#4fd68f; --down:#ff6b57;
+  --line:#212634; --accent:#ff6b1a; --accent-rgb:255,107,26; --accent-ink:#0a0c10; --up:#4fd68f; --down:#ff4d7a;
   --bar:#262c3a;
   --font:"Montserrat",system-ui,-apple-system,"Segoe UI",sans-serif;
 }
@@ -32,7 +34,7 @@ header.top{border-bottom:1px solid var(--line);background:rgba(7,8,13,.85)}
 .logo{flex:none;height:38px;width:auto;display:block}
 .hero{position:relative}
 .hero::before{content:"";position:absolute;inset:-40px -30vw auto;height:420px;z-index:-1;pointer-events:none;
-  background:radial-gradient(40% 60% at 20% 30%,rgba(200,240,60,.13),transparent 70%),
+  background:radial-gradient(40% 60% at 20% 30%,rgba(var(--accent-rgb),.16),transparent 70%),
              radial-gradient(35% 55% at 85% 10%,rgba(120,90,255,.16),transparent 70%)}
 main{overflow:hidden}
 header.top .wrap{display:flex;justify-content:space-between;align-items:center;gap:12px;
@@ -65,7 +67,7 @@ section.block p{margin:6px 0 0;color:var(--ink);opacity:.86}
 .table tr:last-child td{border-bottom:0}
 .table .r{text-align:right}.table .c{text-align:center}
 .table td.pos{font-weight:800;width:2.5em}
-.table tr.lead td{background:rgba(200,240,60,.12)}
+.table tr.lead td{background:rgba(var(--accent-rgb),.14)}
 .table tr.lead td.pos{color:var(--accent)}
 .table .mv{font-size:13px;font-weight:700;white-space:nowrap}
 .mv.up{color:var(--up)}.mv.down{color:var(--down)}.mv.same{color:var(--muted)}
@@ -199,8 +201,8 @@ def _section(s, wide=False):
 
 
 def _brand(site_dir, prefix, league_name):
-    """Your own logo if site/logo.svg or site/logo.png exists, otherwise an initials badge."""
-    for name in ("logo.svg", "logo.png"):
+    """Your own logo (site/logo.svg or logo.png) if uploaded, otherwise the generated crest."""
+    for name in ("logo.svg", "logo.png", "crest.svg"):
         if (Path(site_dir) / name).exists():
             return f'<img class="logo" src="{prefix}{name}" alt="">'
     words = [w for w in re.findall(r"[A-Za-z0-9]+", league_name) if w.lower() not in ("the", "of", "and")]
@@ -253,6 +255,7 @@ def render_page(report, site_dir, prefix, archive):
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 {CSS}
+{_ACCENT_CSS}
 </style>
 </head>
 <body>
@@ -277,10 +280,38 @@ Data from the official Fantasy Premier League game. Updated automatically after 
 """
 
 
-def write_site(report, site_dir):
+CREST = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 72" role="img" aria-label="League crest">
+  <path d="M32 2 L60 10 V34 C60 52 47 64 32 70 C17 64 4 52 4 34 V10 Z" fill="#10131b" stroke="ACCENT" stroke-width="3" stroke-linejoin="round"/>
+  <circle cx="32" cy="30" r="15" fill="#f1f0ea"/>
+  <g stroke="#0a0c10" stroke-width="1.6" stroke-linecap="round">
+    <line x1="32" y1="24.5" x2="32" y2="15.5"/><line x1="37.2" y1="28.3" x2="45.6" y2="25.6"/>
+    <line x1="35.2" y1="34.5" x2="40.4" y2="41.6"/><line x1="28.8" y1="34.5" x2="23.6" y2="41.6"/>
+    <line x1="26.8" y1="28.3" x2="18.4" y2="25.6"/>
+  </g>
+  <polygon points="32,24.5 37.2,28.3 35.2,34.5 28.8,34.5 26.8,28.3" fill="#0a0c10"/>
+  <polyline points="10,48 29,48 33,42 37,57 42,31 46,51 49,48 54,48" fill="none" stroke="#10131b" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="10,48 29,48 33,42 37,57 42,31 46,51 49,48 54,48" fill="none" stroke="ACCENT" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+"""
+
+
+def _accent_css(accent):
+    """Override the highlight colour from config.json (e.g. "#ff6b1a")."""
+    h = accent.lstrip("#")
+    if not re.fullmatch(r"[0-9a-fA-F]{6}", h):
+        return ""
+    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+    ink = "#0a0c10" if (0.299 * r + 0.587 * g + 0.114 * b) > 140 else "#ffffff"
+    return f":root{{--accent:#{h};--accent-rgb:{r},{g},{b};--accent-ink:{ink}}}"
+
+
+def write_site(report, site_dir, accent="#ff6b1a"):
     site_dir = Path(site_dir)
     (site_dir / "gw").mkdir(parents=True, exist_ok=True)
     (site_dir / ".nojekyll").write_text("")
+    (site_dir / "crest.svg").write_text(CREST.replace("ACCENT", accent))
+    global _ACCENT_CSS
+    _ACCENT_CSS = _accent_css(accent)
     archive = {int(p.stem) for p in (site_dir / "gw").glob("*.html") if p.stem.isdigit()}
     archive.add(report.gameweek)
     (site_dir / "gw" / f"{report.gameweek}.html").write_text(

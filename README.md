@@ -78,8 +78,10 @@ your Teams chat within seconds. After that, it posts automatically every gamewee
 
 ## Customising
 
+- **Colour:** change `"accent_color"` in `config.json` (e.g. your exact brand
+  orange as a hex code like `#ff6b1a`). The crest follows the same colour.
 - **Logo:** upload your own `logo.svg` or `logo.png` into the `site/` folder and
-  it replaces the initials badge in the page header.
+  it replaces the crest in the page header.
 
 - **Nicknames:** in `config.json`, map a manager's FPL team ID to a nickname, e.g.
   `"nicknames": { "1234567": "The Gaffer" }`. You can find a manager's team ID

@@ -8,6 +8,7 @@
     { "game": "challenge", "id": 3846, "label": "FPL Challenge" },
     { "game": "draft", "id": 37029, "label": "FPL Draft" }
   ],
+  "accent_color": "#ff6b1a",
   "site_url": "https://jdellborg.github.io/Fantasy-Football/",
   "title": null,
   "nicknames": {}

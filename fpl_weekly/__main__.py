@@ -52,7 +52,7 @@ def build(args):
             return 0
 
     report = build_report(client, config, args.gameweek)
-    page = write_site(report, SITE)
+    page = write_site(report, SITE, config.get("accent_color", "#ff6b1a"))
     link = None
     if config.get("site_url"):
         link = config["site_url"].rstrip("/") + f"/gw/{report.gameweek}.html"
