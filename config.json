@@ -1,0 +1,9 @@
+{
+  "classic_league_id": 462321,
+  "h2h_leagues": [
+    { "id": 462400, "label": "Main H2H" },
+    { "id": 939684, "label": "Champions H2H" }
+  ],
+  "title": null,
+  "nicknames": {}
+}

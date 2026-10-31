@@ -1,0 +1,75 @@
+name: FPL weekly update
+
+on:
+  # Checks every morning at 08:00 UTC (9am UK in summer, 8am in winter).
+  # It only posts once a gameweek is fully finished (bonus points confirmed)
+  # and hasn't been posted yet - so it posts once per gameweek, automatically.
+  schedule:
+    - cron: "0 8 * * *"
+  # Lets you run it by hand from the Actions tab.
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Preview only, or post to Teams?"
+        type: choice
+        options: [preview, post]
+        default: preview
+      gameweek:
+        description: "Gameweek number (leave blank for the latest finished one)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fpl-weekly
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build (and maybe post) the update
+        env:
+          TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+          MODE: ${{ github.event_name == 'schedule' && 'scheduled' || inputs.mode }}
+          GAMEWEEK: ${{ inputs.gameweek }}
+        run: |
+          ARGS=""
+          if [ -n "$GAMEWEEK" ]; then ARGS="--gameweek $GAMEWEEK"; fi
+          if [ "$MODE" = "scheduled" ]; then
+            if [ -z "$TEAMS_WEBHOOK_URL" ]; then
+              echo "No TEAMS_WEBHOOK_URL secret yet - skipping the automatic post."
+              exit 0
+            fi
+            python -m fpl_weekly --post --only-if-new
+          elif [ "$MODE" = "post" ]; then
+            python -m fpl_weekly --post $ARGS
+          else
+            python -m fpl_weekly $ARGS
+          fi
+
+      - name: Save the preview files
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fpl-update
+          path: out/
+          if-no-files-found: ignore
+
+      - name: Remember which gameweek was posted
+        run: |
+          if [ -n "$(git status --porcelain state/)" ]; then
+            git config user.name "fpl-weekly-bot"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add state/
+            git commit -m "Posted gameweek $(cat state/last_posted_gameweek.txt) update"
+            git push
+          fi
