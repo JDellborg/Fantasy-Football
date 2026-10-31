@@ -52,6 +52,10 @@ class FakeClient:
             "events": [{"id": g, "finished": g <= GW, "data_checked": g <= GW,
                         "average_entry_score": 50, "highest_score": 120} for g in range(1, 39)],
             "elements": [{"id": p, "web_name": f"Player{p}"} for p in range(1, N_PLAYERS + 1)],
+            "phases": [{"id": 1, "name": "Overall", "start_event": 1, "stop_event": 38},
+                       {"id": 2, "name": "August", "start_event": 1, "stop_event": 3},
+                       {"id": 3, "name": "September", "start_event": 4, "stop_event": 7}],
+            "chips": [{"name": n, "start_event": 1, "stop_event": 19} for n in ("wildcard", "freehit", "bboost", "3xc")],
         }
 
     def live(self, gw):
@@ -59,7 +63,8 @@ class FakeClient:
                              for p, v in self.live_pts[gw].items()]}
 
     def entry_history(self, e):
-        return {"current": self.history[e], "chips": []}
+        chips = [{"name": "wildcard", "event": 3}] if e == self.entries[0] else []
+        return {"current": self.history[e], "chips": chips}
 
     def picks(self, e, gw):
         if (e, gw) not in self.squads or not any(r["event"] == gw for r in self.history[e]):
@@ -210,6 +215,29 @@ class ExtraLeaguesAndSiteTest(unittest.TestCase):
                 raise RuntimeError("boom")
         report = build_report(FakeClient(), EXTRA_CONFIG, extra_clients={"challenge": Broken(), "draft": FakeDraft()})
         self.assertNotIn("FPL Challenge", to_markdown(report))
+
+
+class SeasonFeaturesTest(unittest.TestCase):
+    def test_month_odds_chips(self):
+        report = build_report(FakeClient(n_managers=21), EXTRA_CONFIG, extra_clients=EXTRAS)
+        titles = {s.title: s for s in report.sections}
+        self.assertIn("Manager of the Month", titles)
+        self.assertIn("Previous winners: August", " ".join(titles["Manager of the Month"].paragraphs))
+        odds = titles["Title odds"].table.rows
+        total = sum(float(r[2].rstrip("%")) for r in odds if not r[2].startswith("<"))
+        self.assertLessEqual(total, 101)
+        chips = titles["Chip tracker"].table
+        self.assertEqual(chips.headers, ["Manager", "WC", "FH", "BB", "TC"])
+        self.assertIn("GW3", [c for r in chips.rows for c in r])
+
+    def test_missing_phases_and_chip_rules(self):
+        client = FakeClient()
+        boot = client.bootstrap()
+        boot.pop("phases"); boot.pop("chips")
+        client.bootstrap = lambda: boot
+        titles = [s.title for s in build_report(client, CONFIG).sections]
+        self.assertNotIn("Manager of the Month", titles)
+        self.assertIn("Chip tracker", titles)   # falls back to half-season windows
 
 
 class InsightsTest(unittest.TestCase):

@@ -4,6 +4,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
 from .insights import build_insights
+from .season import chip_tracker, manager_of_the_month, title_odds
 
 CHIP_NAMES = {
     "wildcard": "a Wildcard",
@@ -36,6 +37,7 @@ class Section:
     full_table: Table = None         # longer version for the web page
     chart: list = None               # [(name, value, tag)] bars for the web page
     insights: list = None            # [Insight] for the "behind the numbers" section
+    web_only: bool = False           # leave out of the full Teams card / markdown summary
     chart_avg: float = None
 
 
@@ -59,6 +61,7 @@ class Manager:
     history: dict = field(default_factory=dict)
     picks: dict = None
     transfers: list = field(default_factory=list)
+    chips: list = field(default_factory=list)
 
     def net(self, gw):
         row = self.history.get(gw)
@@ -144,6 +147,8 @@ class ReportBuilder:
             raise SystemExit("No finished gameweek yet - nothing to report.")
         self.players = {p["id"]: p for p in boot["elements"]}
         self.total_players = boot.get("total_players")
+        self.phases = boot.get("phases", [])
+        self.chip_rules = boot.get("chips", [])
         self.squads, self.xis, self.caps = {}, {}, {}
         self.stories = []
         self.notes = []          # (priority, text) for "Also this week"
@@ -183,7 +188,9 @@ class ReportBuilder:
 
         gw = self.gw
         for m in self.managers:
-            m.history = {row["event"]: row for row in self.client.entry_history(m.entry).get("current", [])}
+            hist = self.client.entry_history(m.entry)
+            m.history = {row["event"]: row for row in hist.get("current", [])}
+            m.chips = hist.get("chips", [])
         self.active = [m for m in self.managers if gw in m.history]
         if not self.active:
             raise SystemExit(f"Nobody in the league has a score for gameweek {gw}.")
@@ -207,9 +214,11 @@ class ReportBuilder:
         self.league_avg = round(sum(scores.values()) / len(scores), 1)
 
         sections = [self.week_section(), self.classic_section()]
+        sections += self.season_features(title_odds, manager_of_the_month)
         sections += [self.h2h_section(*h) for h in self.h2h]
         sections += [self.extra_section(lg) for lg in self.config.get("extra_leagues", [])
                      if lg.get("id")]
+        sections += self.season_features(chip_tracker)
         self.collect_notes()
         self.insights = build_insights(self)
         if self.insights:
@@ -226,6 +235,15 @@ class ReportBuilder:
             key_facts=self.key_facts,
             card_insight=self.insights[0].text if self.insights else None,
         )
+
+    def season_features(self, *features):
+        out = []
+        for feature in features:
+            try:
+                out.append(feature(self, Section, Table))
+            except Exception as e:  # a season feature failing should never stop the update
+                print(f"WARNING: {feature.__name__} failed: {e}")
+        return out
 
     # -- headline --
     def headline(self):

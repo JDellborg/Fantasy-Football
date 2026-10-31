@@ -77,6 +77,8 @@ def to_adaptive_card(report):
         _text(report.standfirst, spacing="Small"),
     ]
     for section in report.sections:
+        if getattr(section, "web_only", False):
+            continue
         items = [_text(section.title, size="Medium", weight="Bolder")]
         for p in section.paragraphs:
             items.append(_text(p, spacing="Small"))
