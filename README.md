@@ -10,7 +10,7 @@ set up, you don't need to touch it.
 - Main H2H: 462400
 - Champions H2H: 939684
 - FPL Challenge: 3846
-- FPL Draft: add the league ID in `config.json` (`"id": null` → your number)
+- FPL Draft: 37029
 
 **Web page:** https://jdellborg.github.io/Fantasy-Football/ (latest week), with
 past weeks at `/gw/<number>.html`.
