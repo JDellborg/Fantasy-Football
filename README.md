@@ -39,6 +39,8 @@ gameweek is completely finished (bonus points confirmed), it posts once.
 
 ### Step 3: Preview it (nothing gets posted)
 1. In the repository, click the **Actions** tab. If GitHub asks, click to enable workflows.
+   (If it says "No workflows found", go to **Settings → Actions → General**, choose
+   **Allow all actions and reusable workflows**, click **Save**, and ask Claude to re-push.)
 2. Click **FPL weekly update** on the left, then **Run workflow**.
 3. Leave **mode** on `preview` and click the green **Run workflow** button.
 4. Wait about 1 minute, then click the run. Scroll down to see the full update
