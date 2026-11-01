@@ -133,7 +133,7 @@ def build_personal_reports(builder):
                            for el, p in sorted(contrib.items(), key=lambda kv: -kv[1])[:3]]
         rep.differentials = [PlayerLine(builder.pname(el), contrib[el], share(el), gshare(el))
                              for el in sorted(xi, key=lambda el: -contrib[el])
-                             if share(el) <= DIFFERENTIAL_MAX_SHARE][:5]
+                             if share(el) <= DIFFERENTIAL_MAX_SHARE and contrib[el] > 0][:5]
         threat_pool = [el for el, c in owners.items() if el not in mine and c / n >= THREAT_MIN_SHARE]
         rep.threats = [PlayerLine(builder.pname(el), builder.pts(el), share(el), gshare(el))
                        for el in sorted(threat_pool, key=lambda el: -builder.pts(el))
