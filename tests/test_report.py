@@ -357,28 +357,19 @@ class WhatIfTest(unittest.TestCase):
 
 class ManagerOfTheWeekTest(unittest.TestCase):
     def test_rounded_rating(self):
+        from fpl_weekly.stats import ReportBuilder
         client = FakeClient(n_managers=12)
-        report = build_report(client, CONFIG)
-        section = next(s for s in report.sections if s.title == "Manager of the Week")
-        from fpl_weekly.stats import ReportBuilder  # noqa: F401  (ensures module import)
-        # chips are marked down
-        md = to_markdown(report)
-        self.assertIn("Triple Captain -", md + "".join(" ".join(r) for r in section.table.rows)
-                      ) if any("Triple Captain" in " ".join(r) for r in section.table.rows) else None
-        ratings = __import__("fpl_weekly.motw", fromlist=["rate_managers"])
-        # rebuild ratings directly to inspect every manager
-        from fpl_weekly.stats import ReportBuilder as RB
-        b = RB(FakeClient(n_managers=12), CONFIG)
-        b.build()
-        by_name = {r.manager.entry: r for r in b.motw_ratings}
-        tc = by_name[client.entries[0]]
-        bb = by_name[client.entries[1]]
-        self.assertTrue(any(l == "Triple Captain" and v <= 0 for l, v in tc.parts))
-        self.assertTrue(any(l == "Bench Boost" and v <= 0 for l, v in bb.parts))
-        # rating = points + adjustments, list sorted by rating
+        b = ReportBuilder(client, CONFIG)
+        report = b.build()
+        by_entry = {r.manager.entry: r for r in b.motw_ratings}
+        # chips are marked down (entries[0] played Triple Captain, entries[1] Bench Boost)
+        self.assertTrue(any(l == "Triple Captain" and v <= 0 for l, v in by_entry[client.entries[0]].parts))
+        self.assertTrue(any(l == "Bench Boost" and v <= 0 for l, v in by_entry[client.entries[1]].parts))
+        # rating = points + adjustments, and the list is ordered by rating
         for r in b.motw_ratings:
             self.assertAlmostEqual(r.rating, round(r.points + sum(v for _l, v in r.parts), 1))
         self.assertEqual(b.motw_ratings, sorted(b.motw_ratings, key=lambda r: (-r.rating, -r.points)))
-        typical, line = b.motw_concentration_line
+        _typical, line = b.motw_concentration_line
         self.assertGreaterEqual(line, 0.60)
+        self.assertEqual(report.key_facts[0][0], "Highest score")
         self.assertEqual(report.key_facts[1][0], "Manager of the Week")
