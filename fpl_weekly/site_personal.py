@@ -159,7 +159,7 @@ def _moves(r):
         items.append(f"<li>Auto-sub: {_e(inn)} on for {_e(out)} ({p} pts)</li>")
     items.append(f"<li>Points left on the bench: {r.bench_points}</li>")
     if r.what_if_gain is not None:
-        items.append(f"<li>Changes since your first team: <strong>{r.what_if_gain:+d}</strong> points (What if?)</li>")
+        items.append(f"<li>Changes since your Gameweek 1 team: <strong>{r.what_if_gain:+d}</strong> points (What if?)</li>")
     top = ", ".join(f"{p.name}{(' ' + p.note) if p.note else ''} {p.points}" for p in r.top_players)
     if top:
         items.insert(0, f"<li>Top scorers for you: {_e(top)}</li>")

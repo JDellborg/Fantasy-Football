@@ -208,7 +208,7 @@ class ExtraLeaguesAndSiteTest(unittest.TestCase):
         self.assertIn("## FPL Draft", md)
         self.assertNotIn("Not set up", md)
         self.assertIn("**Alex** scored 61, 11 above the Challenge average", md)  # same person, same name
-        self.assertIn("| 1 | Alex | 61 | 40 | +21 | 481 | ▲1 |", md)   # totals from history, not stale table
+        self.assertIn("| 1 | Alex | 61 | 40 | 481 | - | ▲1 |", md)   # totals from history, not stale table
 
         payload = to_teams_payload(report, "https://example.github.io/ff/gw/6.html")
         card = payload["attachments"][0]["content"]

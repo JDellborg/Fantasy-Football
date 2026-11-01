@@ -590,10 +590,10 @@ class ReportBuilder:
         s = Section(lg.get("label") or league["name"])
         rows = []
         for e in sorted(hist, key=lambda e: (now[e], names[e])):
-            change = f"{pts[e] - last[e]:+d}" if e in pts and e in last else "-"
-            rows.append([str(now[e]), names[e], str(pts.get(e, "-")), str(last.get(e, "-")), change,
-                         str(total(e, gw)), movement(before[e] - now[e])])
-        s.table = Table(["Pos", "Manager", f"GW{gw}", f"GW{gw - 1}", "Change", "Total", "+/-"], rows,
+            wr = hist[e].get(gw, {}).get("overall_rank")
+            rows.append([str(now[e]), names[e], str(pts.get(e, "-")), str(last.get(e, "-")),
+                         str(total(e, gw)), f"{wr:,}" if wr else "-", movement(before[e] - now[e])])
+        s.table = Table(["Pos", "Manager", f"GW{gw}", f"GW{gw - 1}", "Total", "World rank", "+/-"], rows,
                         align=["left", "left", "right", "right", "right", "right", "right"],
                         widths=["auto", "stretch", "auto", "auto", "auto", "auto", "auto"])
 
