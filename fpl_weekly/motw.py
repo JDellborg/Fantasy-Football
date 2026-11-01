@@ -3,8 +3,9 @@
 Rating = gameweek points (after hits)
          - chip boost          Triple Captain: the extra captain points; Bench Boost: the bench
                                points; Wildcard / Free Hit: 10% of the score
-         - concentration       if the top 3 players made more than 60% of the points:
-                               0.5 for every percentage point above 60%
+         - concentration       if the top 3 players' share of the points is more than 5 percentage
+                               points above the league's typical share that week (and above 60%):
+                               0.5 for every percentage point over that line
          + underdog credit     0.5 for every league place below 1st going into the week (max 10)
          + above own average   a quarter of the points above their own season average (max 10)
 """
@@ -12,7 +13,8 @@ Rating = gameweek points (after hits)
 from dataclasses import dataclass, field
 
 CHIP_FH_WC_DISCOUNT = 0.10
-CONCENTRATION_START = 0.60
+CONCENTRATION_FLOOR = 0.60    # never penalise below this share
+CONCENTRATION_MARGIN = 0.05   # allowance above the league's median share that week
 CONCENTRATION_RATE = 0.5      # rating points per percentage point above the start
 UNDERDOG_PER_PLACE = 0.5
 UNDERDOG_CAP = 10
@@ -79,7 +81,8 @@ def rate_managers(builder):
             label = "Wildcard" if chip == "wildcard" else "Free Hit"
             r.parts.append((label, -round(max(net, 0) * CHIP_FH_WC_DISCOUNT, 1)))
 
-        # concentration in the top three players (captain counted with the armband)
+        # concentration in the top three players (captain counted with the armband);
+        # the penalty is applied below, once the league's typical share is known
         contrib = {el: builder.pts(el) for el in xi}
         if cap and cap[0] in contrib:
             contrib[cap[0]] = cap[1]
@@ -87,9 +90,6 @@ def rate_managers(builder):
         if positive > 0:
             top3 = sum(sorted((v for v in contrib.values() if v > 0), reverse=True)[:3])
             r.top3_share = top3 / positive
-            over = (r.top3_share - CONCENTRATION_START) * 100
-            if over > 0:
-                r.parts.append((f"Top 3 = {r.top3_share:.0%}", -round(over * CONCENTRATION_RATE, 1)))
 
         # underdog credit
         if m.entry in prev:
@@ -105,8 +105,18 @@ def rate_managers(builder):
             if above > 0:
                 r.parts.append(("Above own avg", round(min(above * FORM_RATE, FORM_CAP), 1)))
 
-        r.rating = round(net + sum(v for _l, v in r.parts), 1)
         ratings.append(r)
+
+    shares = sorted(r.top3_share for r in ratings if r.top3_share)
+    typical = shares[len(shares) // 2] if shares else 0
+    line = max(CONCENTRATION_FLOOR, typical + CONCENTRATION_MARGIN)
+    builder.motw_concentration_line = (typical, line)
+    for r in ratings:
+        over = (r.top3_share - line) * 100
+        if over > 0:
+            r.parts.insert(1 if r.chip else 0,
+                           (f"Top 3 = {r.top3_share:.0%}", -round(over * CONCENTRATION_RATE, 1)))
+        r.rating = round(r.points + sum(v for _l, v in r.parts), 1)
     return sorted(ratings, key=lambda r: (-r.rating, -r.points))
 
 
@@ -131,7 +141,8 @@ def manager_of_the_week(builder, Section, Table):
     reasons = []
     if win.chip is None:
         reasons.append("no chip")
-    if win.top3_share and win.top3_share <= CONCENTRATION_START:
+    typical, line = getattr(builder, "motw_concentration_line", (0, CONCENTRATION_FLOOR))
+    if win.top3_share and win.top3_share <= line:
         reasons.append(f"points spread across the team (top three players {win.top3_share:.0%})")
     if win.prev_rank and win.prev_rank > 1:
         reasons.append(f"started the week {_ordinal(win.prev_rank)}")
@@ -152,7 +163,8 @@ def manager_of_the_week(builder, Section, Table):
     s.table = Table(["Pos", "Manager", "GW", "Adjustments", "Rating"], rows,
                     align=["left", "left", "right", "left", "right"],
                     widths=["auto", "auto", "auto", "stretch", "auto"])
-    s.paragraphs.append("How it works: gameweek points, minus any boost from a chip, minus a deduction "
-                        "if more than 60% of the points came from three players, plus credit for starting "
-                        "the week lower in the table and for beating their own average.")
+    s.paragraphs.append(f"How it works: gameweek points, minus any boost from a chip, minus a deduction "
+                        f"if the top three players made up more than {line:.0%} of the points (this week's "
+                        f"typical share was {typical:.0%}), plus credit for starting the week lower in the "
+                        f"table and for beating their own average.")
     return s
