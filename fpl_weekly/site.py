@@ -6,6 +6,8 @@ Output layout (inside site/):
 """
 
 import html
+
+from .site_personal import CSS as PERSONAL_CSS, render_personal
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -255,6 +257,7 @@ def render_page(report, site_dir, prefix, archive):
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 {CSS}
+{PERSONAL_CSS}
 {_ACCENT_CSS}
 </style>
 </head>
@@ -268,6 +271,7 @@ def render_page(report, site_dir, prefix, archive):
 <div class="date">Published {date}</div>
 </div>
 {tiles}
+{render_personal(getattr(report, "personal", []))}
 {"".join(blocks)}
 </main>
 <footer><div class="wrap">

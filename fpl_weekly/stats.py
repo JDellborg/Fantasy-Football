@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 
 from .insights import build_insights
 from .motw import manager_of_the_week
+from .personal import build_personal_reports
 from .season import manager_of_the_month, title_odds, what_if
 
 CHIP_NAMES = {
@@ -51,6 +52,7 @@ class Report:
     sections: list
     key_facts: list = field(default_factory=list)   # [(label, value)] for the Teams teaser
     card_insight: str = None                         # one deeper stat for the Teams teaser
+    personal: list = field(default_factory=list)     # PersonalReport per manager (web page)
 
 
 @dataclass
@@ -142,6 +144,7 @@ class ReportBuilder:
         self.cache_dir = cache_dir
         self.what_if_results = []
         self.motw_ratings = []
+        self.classic_now, self.classic_prev = {}, {}
         self.config = config
         self.extra_clients = extra_clients or {}
         boot = client.bootstrap()
@@ -229,6 +232,11 @@ class ReportBuilder:
         sections += self.season_features(what_if)
         self.collect_notes()
         self.insights = build_insights(self)
+        try:
+            self.personal = build_personal_reports(self)
+        except Exception as e:  # personal reports should never stop the update
+            print(f"WARNING: personal reports failed: {e}")
+            self.personal = []
         if self.insights:
             sections.append(Section("Behind the numbers", insights=self.insights[:6]))
         sections.append(self.notes_section())
@@ -242,6 +250,7 @@ class ReportBuilder:
             sections=sections,
             key_facts=self.key_facts,
             card_insight=self.insights[0].text if self.insights else None,
+            personal=self.personal,
         )
 
     def season_features(self, *features):
@@ -335,6 +344,7 @@ class ReportBuilder:
         prev = competition_rank([(m.entry, m.history[gw - 1]["total_points"]) for m in prev_pool],
                                 key=lambda x: -x[1]) if prev_pool else {}
         moves = {m.entry: (prev[m.entry] - now[m.entry]) if m.entry in prev else 0 for m in self.active}
+        self.classic_now, self.classic_prev = now, prev
 
         ordered = sorted(self.active, key=lambda m: (now[m.entry], m.name))
         if len(ordered) > CLASSIC_TOP + CLASSIC_BOTTOM + 1:
@@ -580,12 +590,12 @@ class ReportBuilder:
         s = Section(lg.get("label") or league["name"])
         rows = []
         for e in sorted(hist, key=lambda e: (now[e], names[e])):
-            diff = f"{pts[e] - last[e]:+d}" if e in pts and e in last else "-"
-            rows.append([str(now[e]), names[e], str(pts.get(e, "-")), diff, str(total(e, gw)),
-                         movement(before[e] - now[e])])
-        s.table = Table(["Pos", "Manager", "GW", "vs last", "Total", "+/-"], rows,
-                        align=["left", "left", "right", "right", "right", "right"],
-                        widths=["auto", "stretch", "auto", "auto", "auto", "auto"])
+            change = f"{pts[e] - last[e]:+d}" if e in pts and e in last else "-"
+            rows.append([str(now[e]), names[e], str(pts.get(e, "-")), str(last.get(e, "-")), change,
+                         str(total(e, gw)), movement(before[e] - now[e])])
+        s.table = Table(["Pos", "Manager", f"GW{gw}", f"GW{gw - 1}", "Change", "Total", "+/-"], rows,
+                        align=["left", "left", "right", "right", "right", "right", "right"],
+                        widths=["auto", "stretch", "auto", "auto", "auto", "auto", "auto"])
 
         # commentary
         overall = None
@@ -616,8 +626,8 @@ class ReportBuilder:
                 line = ", ".join(bits)
                 if e in last:
                     d = pts[e] - last[e]
-                    line += (f" ({'up' if d > 0 else 'down'} {abs(d)} on last week)" if d else
-                             " (same as last week)")
+                    line += (f" ({'up' if d > 0 else 'down'} {abs(d)} on their GW{gw - 1} score of {last[e]})"
+                             if d else f" (the same as their GW{gw - 1} score)")
                 s.paragraphs.append(line + ".")
         return s
 

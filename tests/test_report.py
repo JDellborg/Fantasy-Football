@@ -208,7 +208,7 @@ class ExtraLeaguesAndSiteTest(unittest.TestCase):
         self.assertIn("## FPL Draft", md)
         self.assertNotIn("Not set up", md)
         self.assertIn("**Alex** scored 61, 11 above the Challenge average", md)  # same person, same name
-        self.assertIn("| 1 | Alex | 61 | +21 | 481 | ▲1 |", md)   # totals from history, not stale table
+        self.assertIn("| 1 | Alex | 61 | 40 | +21 | 481 | ▲1 |", md)   # totals from history, not stale table
 
         payload = to_teams_payload(report, "https://example.github.io/ff/gw/6.html")
         card = payload["attachments"][0]["content"]
@@ -373,3 +373,21 @@ class ManagerOfTheWeekTest(unittest.TestCase):
         self.assertGreaterEqual(line, 0.60)
         self.assertEqual(report.key_facts[0][0], "Highest score")
         self.assertEqual(report.key_facts[1][0], "Manager of the Week")
+
+
+class PersonalReportTest(unittest.TestCase):
+    def test_one_report_per_manager_on_the_page(self):
+        import tempfile
+        from fpl_weekly.site import write_site
+        report = build_report(FakeClient(n_managers=9), EXTRA_CONFIG, extra_clients=EXTRAS)
+        self.assertEqual(len(report.personal), 9)
+        r = report.personal[0]
+        self.assertTrue(r.summary)
+        self.assertEqual(r.points, r.season[-1][1])
+        self.assertIsNotNone(r.captain)
+        for p in r.differentials:
+            self.assertLessEqual(p.league_share, 0.25)
+        with tempfile.TemporaryDirectory() as d:
+            page = write_site(report, d).read_text()
+            self.assertIn('id="me-select"', page)
+            self.assertEqual(page.count('class="me-report"'), 9)
