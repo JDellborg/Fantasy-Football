@@ -98,6 +98,11 @@ def build(args):
             f.write("\n<details><summary><b>Full web page content (click to expand)</b></summary>\n\n")
             f.write(markdown + "\n\n</details>\n")
     print(markdown)
+    for r in report.personal:
+        print(f"[personal report] {r.name}: {r.summary} Captain: {(r.captain or {}).get('name')} "
+              f"{(r.captain or {}).get('points')}. Differentials: "
+              f"{', '.join(f'{p.name} {p.points}' for p in r.differentials) or '-'}. Threats: "
+              f"{', '.join(f'{p.name} {p.points}' for p in r.threats) or '-'}.")
     set_output(publish="true", gameweek=report.gameweek)
     return 0
 
