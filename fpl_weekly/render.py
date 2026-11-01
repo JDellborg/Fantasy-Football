@@ -65,7 +65,9 @@ def to_teaser_card(report, link):
         "version": "1.4",
         "msteams": {"width": "Full"},
         "body": body,
-        "actions": [{"type": "Action.OpenUrl", "title": "Read the full report", "url": link}],
+        "actions": [{"type": "Action.OpenUrl", "title": "Read the full report", "url": link}]
+                   + ([{"type": "Action.OpenUrl", "title": "Your personal report", "url": f"{link}#me"}]
+                      if getattr(report, "personal", None) else []),
     }
 
 
@@ -148,4 +150,6 @@ def to_markdown_teaser(report, link=None):
         out += [">", "> **BEHIND THE NUMBERS**  ", f"> {report.card_insight}"]
     if link:
         out += [">", f"> **[ Read the full report ]({link})**"]
+        if getattr(report, "personal", None):
+            out += [f"> **[ Your personal report ]({link}#me)**"]
     return "\n".join(out) + "\n"

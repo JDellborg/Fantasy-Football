@@ -213,6 +213,8 @@ class ExtraLeaguesAndSiteTest(unittest.TestCase):
         payload = to_teams_payload(report, "https://example.github.io/ff/gw/6.html")
         card = payload["attachments"][0]["content"]
         self.assertEqual(card["actions"][0]["url"], "https://example.github.io/ff/gw/6.html")
+        self.assertEqual(card["actions"][1]["title"], "Your personal report")
+        self.assertEqual(card["actions"][1]["url"], "https://example.github.io/ff/gw/6.html#me")
 
         with tempfile.TemporaryDirectory() as d:
             page = write_site(report, d).read_text()
