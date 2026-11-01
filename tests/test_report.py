@@ -144,6 +144,12 @@ class ReportTest(unittest.TestCase):
     def test_first_gameweek(self):
         self.check(FakeClient(seed=5), gameweek=1)
 
+    def test_nickname_by_display_name(self):
+        cfg = dict(CONFIG, nicknames={"Kim": "Kim Sheng"})
+        md = to_markdown(build_report(FakeClient(), cfg))
+        self.assertIn("Kim Sheng", md)
+        self.assertNotIn("| Kim |", md)
+
     def test_nicknames(self):
         client = FakeClient()
         cfg = dict(CONFIG, nicknames={str(client.entries[0]): "The Gaffer"})

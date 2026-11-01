@@ -128,12 +128,17 @@ def competition_rank(items, key):
 
 
 def make_display_names(player_names, nicknames):
-    """First names, unless two people share one (then full names)."""
+    """First names, unless two people share one (then full names).
+
+    Nicknames in config.json can be keyed by FPL team ID, full name or the usual display name,
+    e.g. {"Jie": "Jie Sheng"}."""
     firsts = Counter(n.split()[0] for n in player_names.values() if n.strip())
     out = {}
     for entry, full in player_names.items():
         first = full.split()[0] if full.strip() else full
-        out[entry] = nicknames.get(str(entry)) or (first if firsts[first] == 1 else full)
+        default = first if firsts[first] == 1 else full
+        out[entry] = (nicknames.get(str(entry)) or nicknames.get(full.strip()) or nicknames.get(default)
+                      or default)
     return out
 
 

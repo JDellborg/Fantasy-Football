@@ -87,9 +87,8 @@ your Teams chat within seconds. After that, it posts automatically every gamewee
 - **Logo:** upload your own `logo.svg` or `logo.png` into the `site/` folder and
   it replaces the crest in the page header.
 
-- **Nicknames:** in `config.json`, map a manager's FPL team ID to a nickname, e.g.
-  `"nicknames": { "1234567": "The Gaffer" }`. You can find a manager's team ID
-  in the web address when you click their team on the FPL site.
+- **Names / nicknames:** in `config.json`, map the name shown (or a full name, or an
+  FPL team ID) to the name you want, e.g. `"nicknames": { "Jie": "Jie Sheng" }`.
 - **Length:** the numbers at the top of `fpl_weekly/stats.py` control how many
   table rows (`CLASSIC_TOP`, `CLASSIC_BOTTOM`) and notes (`MAX_NOTES`) are shown.
 - **Fonts:** the web page uses Montserrat. Teams cards always use the Teams font.
