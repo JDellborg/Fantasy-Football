@@ -72,6 +72,10 @@ section.block p{margin:6px 0 0;color:var(--ink);opacity:.86}
 .table tr.lead td{background:rgba(var(--accent-rgb),.14)}
 .table tr.lead td.pos{color:var(--accent)}
 .table .mv{font-size:13px;font-weight:700;white-space:nowrap}
+.table .formcol{border-left:1px solid var(--line);padding-left:14px}
+.formtable th,.formtable td{width:1%;white-space:nowrap;padding-right:18px}
+.formtable .spacer{width:auto;padding:0}
+.formtop{color:var(--accent);font-weight:800}
 .mv.up{color:var(--up)}.mv.down{color:var(--down)}.mv.same{color:var(--muted)}
 .team{color:var(--muted);font-size:14px}
 .score{display:inline-block;background:var(--surface-2);color:var(--ink);border:1px solid var(--line);font-weight:800;border-radius:8px;
@@ -109,6 +113,10 @@ footer{padding:28px 0 48px;color:var(--muted);font-size:14px}
   .hero{padding:32px 0 20px}
   section.block{padding:18px 14px 12px}
   .table{font-size:14px}.table td,.table th{padding-left:5px;padding-right:5px}
+  .formtable td{white-space:normal}
+  .formtable th,.formtable td{padding-right:4px;padding-left:4px}
+  .table .formcol{padding-left:6px}
+  .formtable th{font-size:10px;letter-spacing:.04em}
   .hide-sm{display:none}
 }
 """
@@ -132,10 +140,14 @@ def _movement(text):
 
 def _table(t, kind=""):
     head = ""
+    form = bool(t.headers and "Last 5" in t.headers)   # classic table: form columns pushed right
+    spacer = '<td class="spacer"></td>'
     if t.headers:
         cells = []
         for i, h in enumerate(t.headers):
-            extra = " hide-sm" if h == "Team" else ""
+            extra = " hide-sm" if h == "Team" else " formcol" if h == "Last 5" else ""
+            if form and h == "Last 5":
+                cells.append('<th class="spacer"></th>')
             cells.append(f'<th class="{_cell_class(i, t.align)}{extra}">{html.escape(h)}</th>')
         head = "<thead><tr>" + "".join(cells) + "</tr></thead>"
     rows = []
@@ -155,10 +167,17 @@ def _table(t, kind=""):
                 inner = _inline(cell)
             if header == "Pos":
                 cls += " pos"
+            if header == "Last 5":
+                cls += " formcol"
+            if header == "Form" and cell in ("1st", "2nd", "3rd"):
+                inner = f'<span class="formtop">{inner}</span>'
+            if form and header == "Last 5":
+                cells.append(spacer)
             cells.append(f'<td class="{cls.strip()}">{inner}</td>')
         lead = ' class="lead"' if t.headers and t.headers[0] == "Pos" and row[0] == "1" else ""
         rows.append(f"<tr{lead}>" + "".join(cells) + "</tr>")
-    return f'<div class="scroll"><table class="table">{head}<tbody>{"".join(rows)}</tbody></table></div>'
+    cls = "table formtable" if form else "table"
+    return f'<div class="scroll"><table class="{cls}">{head}<tbody>{"".join(rows)}</tbody></table></div>'
 
 
 def _chart(section):

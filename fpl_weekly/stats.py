@@ -16,6 +16,7 @@ CHIP_NAMES = {
     "manager": "the Assistant Manager chip",
 }
 FORM_WEEKS = 4
+FORM_TABLE_WEEKS = 5     # weeks used for the form column in the classic table
 CLASSIC_TOP = 5          # rows shown at the top of the classic table
 CLASSIC_BOTTOM = 2       # rows shown at the bottom (if the league is bigger)
 MAX_NOTES = 5            # bullet points in "Also this week"
@@ -351,22 +352,36 @@ class ReportBuilder:
             shown = ordered[:CLASSIC_TOP] + [None] + ordered[-CLASSIC_BOTTOM:]
         else:
             shown = ordered
+        # form table: cumulative points over the last FORM_TABLE_WEEKS gameweeks
+        weeks = [g for g in range(gw - FORM_TABLE_WEEKS + 1, gw + 1) if g >= 1]
+        form_pts = {m.entry: sum(m.net(g) or 0 for g in weeks if g in m.history) for m in self.active}
+        form_rank = competition_rank(list(form_pts.items()), key=lambda x: -x[1])
+        self.form_pts, self.form_rank = form_pts, form_rank
+
+        def cells(m, team=False):
+            out = [str(now[m.entry]), m.name] + ([m.team] if team else [])
+            return out + [str(m.net(gw)), str(m.history[gw]["total_points"]), movement(moves[m.entry]),
+                          str(form_pts[m.entry]), ordinal(form_rank[m.entry])]
+
         rows = []
         for m in shown:
-            if m is None:
-                rows.append(["", "…", "", "", ""])
-                continue
-            rows.append([str(now[m.entry]), m.name, str(m.net(gw)),
-                         str(m.history[gw]["total_points"]), movement(moves[m.entry])])
+            rows.append(["", "…", "", "", "", "", ""] if m is None else cells(m))
         s = Section(self.league["name"])
-        headers = ["Pos", "Manager", "GW", "Total", "+/-"]
-        align = ["left", "left", "right", "right", "right"]
-        s.table = Table(headers, rows, align=align, widths=["auto", "stretch", "auto", "auto", "auto"])
-        s.full_table = Table(["Pos", "Manager", "Team", "GW", "Total", "+/-"],
-                             [[str(now[m.entry]), m.name, m.team, str(m.net(gw)),
-                               str(m.history[gw]["total_points"]), movement(moves[m.entry])]
-                              for m in ordered],
-                             align=["left", "left", "left", "right", "right", "right"])
+        span = f"GW{weeks[0]}-{weeks[-1]}" if len(weeks) > 1 else f"GW{weeks[0]}"
+        headers = ["Pos", "Manager", "GW", "Total", "+/-", "Last 5", "Form"]
+        align = ["left", "left", "right", "right", "right", "right", "right"]
+        s.table = Table(headers, rows, align=align,
+                        widths=["auto", "stretch", "auto", "auto", "auto", "auto", "auto"])
+        s.full_table = Table(["Pos", "Manager", "Team", "GW", "Total", "+/-", "Last 5", "Form"],
+                             [cells(m, team=True) for m in ordered],
+                             align=["left", "left", "left", "right", "right", "right", "right", "right"])
+        hot = [m for m in self.active if form_rank[m.entry] == 1]
+        self._form_notes = [
+            f"{join_names(m.name for m in hot)} {'tops' if len(hot) == 1 else 'share top spot in'} the form "
+            f"table with {form_pts[hot[0].entry]} points from the last {words(len(weeks))} gameweeks.",
+            f"Last 5 = total points over the last {len(weeks)} gameweeks ({span}); Form = position in that "
+            f"form table.",
+        ]
 
         # leader story
         leader = ordered[0]
@@ -407,6 +422,7 @@ class ReportBuilder:
             who = [m for m in self.active if moves[m.entry] == down][0]
             s.paragraphs.append(f"{who.name} had the biggest drop, down {words(-down)} places to "
                                 f"{ordinal(now[who.entry])}.")
+        s.paragraphs += self._form_notes
         return s
 
     def captain_of(self, m):

@@ -99,9 +99,21 @@ def to_adaptive_card(report):
     }
 
 
+MAX_CARD_BYTES = 27_000   # Teams rejects cards over ~28KB
+
+
+def _fit(card):
+    """Drop sections from the end of a long card until it fits Teams' size limit."""
+    import json
+    while len(json.dumps(card, separators=(",", ":"), ensure_ascii=False).encode()) > MAX_CARD_BYTES \
+            and len(card["body"]) > 4:
+        card["body"].pop()
+    return card
+
+
 def to_teams_payload(report, link=None):
     """The message body a Teams 'post when a webhook request is received' workflow expects."""
-    card = to_teaser_card(report, link) if link else to_adaptive_card(report)
+    card = to_teaser_card(report, link) if link else _fit(to_adaptive_card(report))
     return {
         "type": "message",
         "attachments": [{
