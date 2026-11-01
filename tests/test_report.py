@@ -121,6 +121,7 @@ class ReportTest(unittest.TestCase):
         size = len(json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode())
         self.assertLess(size, 28_000, "Teams cards must stay under ~28KB")
         self.assertIn("Manager of the Week", md)
+        self.assertIn("Highest score", md)
         self.assertNotIn("| |", md)  # no blank table headers
         self.assertLess(len(report.headline), 90)
         self.assertEqual(payload["attachments"][0]["content"]["type"], "AdaptiveCard")
@@ -155,11 +156,21 @@ if __name__ == "__main__":
 
 
 class FakeChallenge:
+    """Challenge league table is deliberately stale (totals lag); history is the truth."""
+    HIST = {1: [(GW - 1, 40, 420), (GW, 61, 481)], 2: [(GW - 1, 70, 430), (GW, 40, 470)]}
+
     def classic_standings(self, league_id):
         return {"name": "Fake Challenge"}, [
-            {"rank": 1, "last_rank": 2, "player_name": "Alex Tester0", "event_total": 61, "total": 481},
-            {"rank": 2, "last_rank": 1, "player_name": "Outsider Person", "event_total": 40, "total": 470},
+            {"entry": 1, "rank": 1, "last_rank": 1, "player_name": "Alex Tester0", "event_total": 0, "total": 400},
+            {"entry": 2, "rank": 2, "last_rank": 2, "player_name": "Outsider Person", "event_total": 0, "total": 390},
         ]
+
+    def entry_history(self, entry):
+        return {"current": [{"event": g, "points": p, "total_points": t, "percentile_rank": 5}
+                            for g, p, t in self.HIST[entry]]}
+
+    def bootstrap(self):
+        return {"events": [{"id": GW, "average_entry_score": 50}]}
 
 
 class FakeDraft:
@@ -196,7 +207,8 @@ class ExtraLeaguesAndSiteTest(unittest.TestCase):
         self.assertIn("## FPL Challenge", md)
         self.assertIn("## FPL Draft", md)
         self.assertNotIn("Not set up", md)
-        self.assertIn("Alex leads on 481", md)   # same person -> same display name
+        self.assertIn("**Alex** scored 61, 11 above the Challenge average", md)  # same person, same name
+        self.assertIn("| 1 | Alex | 61 | +21 | 481 | ▲1 |", md)   # totals from history, not stale table
 
         payload = to_teams_payload(report, "https://example.github.io/ff/gw/6.html")
         card = payload["attachments"][0]["content"]

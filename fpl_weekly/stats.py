@@ -4,6 +4,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
 from .insights import build_insights
+from .motw import manager_of_the_week
 from .season import manager_of_the_month, title_odds, what_if
 
 CHIP_NAMES = {
@@ -140,6 +141,7 @@ class ReportBuilder:
         self.client = client
         self.cache_dir = cache_dir
         self.what_if_results = []
+        self.motw_ratings = []
         self.config = config
         self.extra_clients = extra_clients or {}
         boot = client.bootstrap()
@@ -214,7 +216,12 @@ class ReportBuilder:
         self.worst = [m for m in self.active if scores[m.entry] == self.bottom]
         self.league_avg = round(sum(scores.values()) / len(scores), 1)
 
-        sections = [self.week_section(), self.classic_section()]
+        sections = [self.week_section()]
+        sections += self.season_features(manager_of_the_week)
+        if self.motw_ratings:
+            w = self.motw_ratings[0]
+            self.key_facts.append(["Manager of the Week", f"{w.manager.name} ({w.points} pts)"])
+        sections.append(self.classic_section())
         sections += self.season_features(title_odds, manager_of_the_month)
         sections += [self.h2h_section(*h) for h in self.h2h]
         sections += [self.extra_section(lg) for lg in self.config.get("extra_leagues", [])
@@ -284,7 +291,7 @@ class ReportBuilder:
         gw = self.gw
         s = Section(f"Gameweek {gw} in numbers")
         rows = [
-            ["Manager of the Week", f"{join_names(m.name for m in self.best)} ({self.top})"],
+            ["Highest score", f"{join_names(m.name for m in self.best)} ({self.top})"],
             ["Lowest score", f"{join_names(m.name for m in self.worst)} ({self.bottom})"],
             ["League average", f"{self.league_avg}"],
         ]
@@ -544,31 +551,74 @@ class ReportBuilder:
         return None
 
     def challenge_section(self, lg):
+        """FPL Challenge: weekly scores, change on last week, and how the league did against
+        everyone playing FPL Challenge. Totals come from each manager's own history, because the
+        Challenge league table can lag behind by days."""
         client = self.extra_clients["challenge"]
-        league, rows = client.classic_standings(lg["id"])
-        if not rows:
+        league, members = client.classic_standings(lg["id"])
+        if not members:
             return None
+        hist = {}
+        for r in members:
+            rows = client.entry_history(r["entry"]).get("current", [])
+            hist[r["entry"]] = {h["event"]: h for h in rows}
+        played = [g for h in hist.values() for g in h if g <= self.gw]
+        if not played:
+            return None
+        gw = max(played)
+        names = {r["entry"]: self.other_name(r["player_name"]) for r in members}
+
+        def total(e, g):
+            rows = [h for ev, h in hist[e].items() if ev <= g]
+            return max(rows, key=lambda h: h["event"])["total_points"] if rows else 0
+
+        now = competition_rank([(e, total(e, gw)) for e in hist], key=lambda x: -x[1])
+        before = competition_rank([(e, total(e, gw - 1)) for e in hist], key=lambda x: -x[1])
+        pts = {e: hist[e][gw]["points"] for e in hist if gw in hist[e]}
+        last = {e: hist[e][gw - 1]["points"] for e in hist if gw - 1 in hist[e]}
+
         s = Section(lg.get("label") or league["name"])
-        table = []
-        for r in sorted(rows, key=lambda r: r["rank"]):
-            move = (r["last_rank"] - r["rank"]) if r.get("last_rank") else 0
-            table.append([str(r["rank"]), self.other_name(r["player_name"]),
-                          str(r.get("event_total", 0)), str(r["total"]), movement(move)])
-        s.table = Table(["Pos", "Manager", "Round", "Total", "+/-"], table,
-                        align=["left", "left", "right", "right", "right"],
-                        widths=["auto", "stretch", "auto", "auto", "auto"])
-        if all(r.get("event_total", 0) == 0 for r in rows):   # round not played yet
-            s.table = Table(["Pos", "Manager", "Total", "+/-"], [[c for i, c in enumerate(row) if i != 2]
-                                                                for row in table],
-                            align=["left", "left", "right", "right"], widths=["auto", "stretch", "auto", "auto"])
-        leader = min(rows, key=lambda r: r["rank"])
-        text = f"{self.other_name(leader['player_name'])} leads on {leader['total']} points."
-        best_round = max(r.get("event_total", 0) for r in rows)
-        if best_round > 0:
-            who = join_names(self.other_name(r["player_name"]) for r in rows
-                             if r.get("event_total", 0) == best_round)
-            text += f" {who} had the best round with {best_round}."
-        s.paragraphs.append(text)
+        rows = []
+        for e in sorted(hist, key=lambda e: (now[e], names[e])):
+            diff = f"{pts[e] - last[e]:+d}" if e in pts and e in last else "-"
+            rows.append([str(now[e]), names[e], str(pts.get(e, "-")), diff, str(total(e, gw)),
+                         movement(before[e] - now[e])])
+        s.table = Table(["Pos", "Manager", "GW", "vs last", "Total", "+/-"], rows,
+                        align=["left", "left", "right", "right", "right", "right"],
+                        widths=["auto", "stretch", "auto", "auto", "auto", "auto"])
+
+        # commentary
+        overall = None
+        try:
+            ev = next((e for e in client.bootstrap().get("events", []) if e.get("id") == gw), {})
+            overall = ev.get("average_entry_score") or None
+        except Exception:
+            pass
+        if pts:
+            avg = sum(pts.values()) / len(pts)
+            text = f"Gameweek {gw}: the league averaged {avg:.0f}"
+            if overall:
+                diff = round(avg - overall)
+                text += (f", in line with the FPL Challenge average of {overall}" if diff == 0 else
+                         f", {abs(diff)} {'above' if diff > 0 else 'below'} the FPL Challenge "
+                         f"average of {overall}")
+            text += "."
+            s.paragraphs.append(text)
+            for e in sorted(pts, key=lambda e: -pts[e])[:5]:
+                h = hist[e][gw]
+                bits = [f"**{names[e]}** scored {pts[e]}"]
+                if overall:
+                    gap = pts[e] - overall
+                    bits.append(f"{abs(gap)} {'above' if gap >= 0 else 'below'} the Challenge average")
+                pct = h.get("percentile_rank")
+                if pct:
+                    bits.append(f"top {pct}% of all players this week")
+                line = ", ".join(bits)
+                if e in last:
+                    d = pts[e] - last[e]
+                    line += (f" ({'up' if d > 0 else 'down'} {abs(d)} on last week)" if d else
+                             " (same as last week)")
+                s.paragraphs.append(line + ".")
         return s
 
     def draft_section(self, lg):
