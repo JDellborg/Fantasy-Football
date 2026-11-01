@@ -1,0 +1,24 @@
+📣 New: the Synpulse FPL weekly report
+
+Hi all, from Gameweek 9 we'll get an automatic roundup in this chat after every gameweek. It covers all our leagues: Classic, Main H2H, Champions H2H, FPL Challenge and FPL Draft.
+
+How it works
+• Once a gameweek is finished and the league tables have updated, a short card is posted here with the week's headline, the key numbers and the title odds.
+• The card has two buttons: "Read the full report" opens the full web page, and "Your personal report" takes you straight to your own breakdown.
+
+What's in the full report
+• Headline and summary of the biggest story of the week
+• Classic league table, now with a 5-week form table alongside it
+• Manager of the Week: not just the top score. It accounts for chips played, how much came from two or three players, where you started the week in the table and how you did against your own average
+• Title odds: each manager's chance of winning the league, from simulating the rest of the season
+• Manager of the Month
+• Results from all the H2H, Challenge and Draft leagues
+• What if?: how everyone would be doing if they'd kept their Gameweek 1 team
+• Behind the numbers: luck in H2H, captain points left on the table, the most consistent manager and more
+
+Your personal report
+Pick your name from the drop-down to see your rank arrow, your captain against the league, your differentials and the threats you didn't own, your transfers and bench points, and your season so far.
+
+Have a look at last week's (Gameweek 8) here: https://jdellborg.github.io/Fantasy-Football/
+
+The first automatic post goes out after Gameweek 9. Feedback and ideas welcome!
