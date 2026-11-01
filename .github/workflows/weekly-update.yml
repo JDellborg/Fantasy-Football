@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "preview = nothing public | page = web page only | test = web page + test chat | post = web page + Teams"
+        description: "preview = nothing public | page = web page only | test = web page + test chat (if set up) | post = web page + Teams"
         type: choice
         options: [preview, page, test, post]
         default: preview
@@ -85,11 +85,18 @@ jobs:
           TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
         run: python -m fpl_weekly post
 
-      - name: Post to the test chat
+      - name: Post to the test chat (skipped if no test chat is set up)
         if: steps.build.outputs.publish == 'true' && env.MODE == 'test'
         env:
           TEAMS_TEST_WEBHOOK_URL: ${{ secrets.TEAMS_TEST_WEBHOOK_URL }}
-        run: python -m fpl_weekly post --test
+        run: |
+          if [ -z "$TEAMS_TEST_WEBHOOK_URL" ]; then
+            echo "No test chat set up (TEAMS_TEST_WEBHOOK_URL) - nothing sent to Teams."
+            echo "The Teams card preview is at the top of this run's summary page."
+            echo "> **Test mode:** nothing was sent to Teams (no test chat set up). The card preview is below." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          python -m fpl_weekly post --test
 
       - name: Save the web page archive and posted gameweek
         if: always() && steps.build.outputs.publish == 'true' && env.MODE != 'preview'
