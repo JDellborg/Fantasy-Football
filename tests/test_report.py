@@ -121,7 +121,7 @@ class ReportTest(unittest.TestCase):
         size = len(json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode())
         self.assertLess(size, 28_000, "Teams cards must stay under ~28KB")
         self.assertIn("Manager of the Week", md)
-        self.assertIn("Highest score", md)
+        self.assertIn("Highest Score", md)
         self.assertNotIn("| |", md)  # no blank table headers
         self.assertLess(len(report.headline), 90)
         self.assertEqual(payload["attachments"][0]["content"]["type"], "AdaptiveCard")
@@ -379,7 +379,10 @@ class ManagerOfTheWeekTest(unittest.TestCase):
         self.assertEqual(b.motw_ratings, sorted(b.motw_ratings, key=lambda r: (-r.rating, -r.points)))
         _typical, line = b.motw_concentration_line
         self.assertGreaterEqual(line, 0.60)
-        self.assertEqual(report.key_facts[0][0], "Highest score")
+        self.assertEqual(report.key_facts[0][0], "Highest Score")
+        labels = [k for k, _v in report.key_facts]
+        self.assertIn("Classic League Leader", labels)
+        self.assertIn("Title Odds", labels)
         self.assertEqual(report.key_facts[1][0], "Manager of the Week")
 
 

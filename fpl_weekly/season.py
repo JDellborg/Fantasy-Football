@@ -81,6 +81,9 @@ def title_odds(builder, Section, Table):
         return "<1%" if 0 < p < 1 else f"{p:.0f}%"
     rows = [[m.name, str(total), pct(p)] for p, m, total in odds if p >= 0.5][:6]
     rest = sum(1 for p, *_ in odds if p < 0.5)
+    top3 = [(m.name, p) for p, m, _t in odds[:3] if p >= 0.5]
+    if top3:
+        builder.key_facts.append(["Title Odds", " · ".join(f"{n} {pct(p)}" for n, p in top3)])
     s = Section("Title odds")
     lead_p, lead_m, _ = odds[0]
     s.paragraphs.append(

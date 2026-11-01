@@ -306,7 +306,7 @@ class ReportBuilder:
         gw = self.gw
         s = Section(f"Gameweek {gw} in numbers")
         rows = [
-            ["Highest score", f"{join_names(m.name for m in self.best)} ({self.top})"],
+            ["Highest Score", f"{join_names(m.name for m in self.best)} ({self.top})"],
             ["Lowest score", f"{join_names(m.name for m in self.worst)} ({self.bottom})"],
             ["League average", f"{self.league_avg}"],
         ]
@@ -390,7 +390,7 @@ class ReportBuilder:
 
         # leader story
         leader = ordered[0]
-        self.key_facts.append(["Classic league leader",
+        self.key_facts.append(["Classic League Leader",
                                f"{leader.name} ({leader.history[gw]['total_points']})"])
         second = ordered[1] if len(ordered) > 1 else None
         gap = leader.history[gw]["total_points"] - (second.history[gw]["total_points"] if second else 0)
