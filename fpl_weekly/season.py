@@ -215,13 +215,13 @@ def what_if(builder, Section, Table):
 
     s = Section("What if?")
     leader = by_whatif[0]
-    text = (f"If everyone had kept their Gameweek 1 team all season (no transfers, no chips), "
+    text = (f"If every manager had kept his Gameweek 1 team all season (no transfers, no chips), "
             f"{leader[0].name} would lead the league with {leader[1]} points. ")
     if best_mover[3] > 0:
-        text += f"{best_mover[0].name} has gained the most from their changes ({best_mover[3]:+d}). "
+        text += f"{best_mover[0].name} has gained the most from his changes ({best_mover[3]:+d}). "
     if worst_mover[3] < 0:
         text += (f"{worst_mover[0].name} would be {-worst_mover[3]} points better off "
-                 f"if they had never changed their Gameweek 1 team. ")
+                 f"if he had never changed his Gameweek 1 team. ")
     if better_off:
         text += (f"In total, {better_off} of {len(results)} managers would be better off with their "
                  f"Gameweek 1 team.")
@@ -236,11 +236,11 @@ def what_if(builder, Section, Table):
                           for i, r in enumerate(by_whatif, 1)],
                          align=["left", "left", "right", "right", "right"])
     late = [r[0].name for r in results if r[4] > 1]
-    note = ("What if = points their Gameweek 1 team would have scored, untouched. Gain = points won (or lost) "
+    note = ("What if = points each manager's Gameweek 1 team would have scored, untouched. Gain = points won (or lost) "
             "by every transfer and chip since Gameweek 1. Estimate: uses FPL's automatic substitution rules; "
             "transfer hits are included in Actual.")
     if late:
-        note += f" Joined after Gameweek 1, so judged on their first team: {', '.join(late)}."
+        note += f" Joined after Gameweek 1, so judged on the first team picked: {', '.join(late)}."
     s.paragraphs.append(note)
     s.web_only = True
     return s

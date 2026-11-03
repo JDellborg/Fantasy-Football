@@ -148,7 +148,7 @@ def manager_of_the_week(builder, Section, Table):
         reasons.append(f"started the week {_ordinal(win.prev_rank)}")
     above = next((v for l, v in win.parts if l == "Above own avg"), 0)
     if above >= 3:
-        reasons.append("well above their usual score")
+        reasons.append("well above his usual score")
     text = f"**{win.manager.name}** is Manager of the Week with a rating of {win.rating:g} from {win.points} points"
     text += (": " + ", ".join(reasons) + ".") if reasons else "."
     if top_scorer is not win:
@@ -166,5 +166,5 @@ def manager_of_the_week(builder, Section, Table):
     s.paragraphs.append(f"How it works: gameweek points, minus any boost from a chip, minus a deduction "
                         f"if the top three players made up more than {line:.0%} of the points (this week's "
                         f"typical share was {typical:.0%}), plus credit for starting the week lower in the "
-                        f"table and for beating their own average.")
+                        f"table and for beating his own average.")
     return s

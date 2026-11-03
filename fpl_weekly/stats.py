@@ -668,8 +668,8 @@ class ReportBuilder:
                 line = ", ".join(bits)
                 if e in last:
                     d = pts[e] - last[e]
-                    line += (f" ({'up' if d > 0 else 'down'} {abs(d)} on their GW{gw - 1} score of {last[e]})"
-                             if d else f" (the same as their GW{gw - 1} score)")
+                    line += (f" ({'up' if d > 0 else 'down'} {abs(d)} on his GW{gw - 1} score of {last[e]})"
+                             if d else f" (the same as his GW{gw - 1} score)")
                 s.paragraphs.append(line + ".")
         return s
 

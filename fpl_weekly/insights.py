@@ -60,14 +60,14 @@ def h2h_luck(builder):
             out.append(Insight(
                 5 + luck[lucky] / 2, _signed(luck[lucky]), f"Luckiest in the {label}",
                 f"{name(lucky, '?')} has {rows[lucky]['pts']} H2H points. Playing every manager every "
-                f"week, their scores would have earned about {expected[lucky]:.0f}. "
+                f"week, his scores would have earned about {expected[lucky]:.0f}. "
                 f"The fixture list has been kind.", "luck+"))
         if luck[unlucky] <= -3:
             out.append(Insight(
                 5 + -luck[unlucky] / 2, _signed(luck[unlucky]), f"Unluckiest in the {label}",
                 f"{name(unlucky, '?')} has {rows[unlucky]['pts']} H2H points. Playing every manager every "
-                f"week, their scores would have earned about {expected[unlucky]:.0f}. "
-                f"Their opponents keep having big weeks.", "luck-"))
+                f"week, his scores would have earned about {expected[unlucky]:.0f}. "
+                f"His opponents keep having big weeks.", "luck-"))
     return out
 
 
@@ -110,10 +110,10 @@ def consistency(builder):
     return [
         Insight(2.5, f"±{spread[wild][0]:.0f}", "Boom or bust",
                 f"{by[wild].name} has the most unpredictable scores in the league, usually landing "
-                f"within {spread[wild][0]:.0f} points either side of their average of {spread[wild][1]:.0f}."),
+                f"within {spread[wild][0]:.0f} points either side of his average of {spread[wild][1]:.0f}."),
         Insight(2, f"±{spread[steady][0]:.0f}", "Most consistent",
                 f"{by[steady].name} rarely has a bad week (or a great one): typically within "
-                f"{spread[steady][0]:.0f} points of their average of {spread[steady][1]:.0f}."),
+                f"{spread[steady][0]:.0f} points of his average of {spread[steady][1]:.0f}."),
     ]
 
 
@@ -195,8 +195,8 @@ def what_if_insight(builder):
     if gain > -30:
         return []
     return [Insight(3 + -gain / 20, f"{gain:+d}", "Should have stuck",
-                    f"{m.name} would have {whatif} points if they had kept their GW{first} team untouched, "
-                    f"{-gain} more than they actually have ({actual}).", "whatif")]
+                    f"{m.name} would have {whatif} points if he had kept his GW{first} team untouched, "
+                    f"{-gain} more than he actually has ({actual}).", "whatif")]
 
 
 def build_insights(builder):
