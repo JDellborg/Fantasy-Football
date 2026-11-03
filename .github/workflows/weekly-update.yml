@@ -107,5 +107,8 @@ jobs:
             git config user.name "fpl-weekly-bot"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git commit -m "Gameweek ${{ steps.build.outputs.gameweek }} update"
-            git push
+            for i in 1 2 3; do
+              git pull --rebase -X theirs origin "${GITHUB_REF_NAME}" && git push && break
+              sleep 5
+            done
           fi
