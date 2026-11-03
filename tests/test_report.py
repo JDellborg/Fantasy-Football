@@ -278,19 +278,23 @@ class ReadinessTest(unittest.TestCase):
         def classic_standings(self, league_id):
             return {}, [{"entry": 1, "player_name": "Alex Tester", "total": self.table_total}]
 
+        def h2h_matches(self, league_id):
+            return [{"event": 9, "entry_1_points": 50, "entry_2_points": 40}]
+
         def entry_history(self, entry):
             return {"current": [{"event": 9, "total_points": 100}]}
 
     def check(self, **kw):
         from fpl_weekly.__main__ import tables_ready
-        return tables_ready(self.Stub(**kw), {"classic_league_id": 1}, 9)[0]
+        return tables_ready(self.Stub(**kw), {"classic_league_id": 1, "h2h_leagues": [{"id": 2}]}, 9)[0]
 
     def test_ready(self):
         self.assertTrue(self.check())
 
-    def test_leagues_still_updating(self):
-        self.assertFalse(self.check(leagues=""))
-        self.assertFalse(self.check(leagues="Updating"))
+    def test_global_flag_still_updating_but_our_tables_done(self):
+        # FPL's global flag lags for hours; our own tables are what matter
+        self.assertTrue(self.check(leagues="Updating"))
+        self.assertTrue(self.check(leagues=""))
 
     def test_bonus_missing(self):
         self.assertFalse(self.check(bonus=False))

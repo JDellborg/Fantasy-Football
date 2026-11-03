@@ -41,24 +41,31 @@ def set_output(**values):
 
 
 def tables_ready(client, config, gw):
-    """True once FPL has finished updating league tables for this gameweek.
+    """True once OUR league tables show this gameweek's final points.
 
-    1. FPL's own status flag must say the leagues are "Updated" and bonus points added.
-    2. Every manager's total in the classic league table must match their history total.
+    FPL's global "leagues" flag can say "Updating" for many hours after every mini-league
+    we care about is done, so it is only used as a shortcut. The real test is our own data:
+    1. bonus points added for every day of the gameweek;
+    2. every manager's total in the classic league table matches their gameweek total;
+    3. each head-to-head league has its results for the gameweek.
     """
     status = client.event_status()
     rows = [r for r in status.get("status", []) if r.get("event") == gw]
-    if rows:  # gw is still the 'current' gameweek, so its status is reported
-        if not all(r.get("bonus_added") for r in rows):
-            return False, "bonus points not added yet"
-        if status.get("leagues") != "Updated":
-            return False, f"league tables still updating (status: {status.get('leagues') or 'pending'!r})"
-        _league, standings = client.classic_standings(config["classic_league_id"])
-        for r in standings:
-            hist = {h["event"]: h for h in client.entry_history(r["entry"]).get("current", [])}
-            if gw in hist and hist[gw]["total_points"] != r["total"]:
-                return False, f"league table total for {r['player_name']} not updated yet"
-    return True, "league tables updated"
+    if not rows:  # status already reports a later gameweek: this one is long done
+        return True, "league tables updated"
+    if not all(r.get("bonus_added") for r in rows):
+        return False, "bonus points not added yet"
+    _league, standings = client.classic_standings(config["classic_league_id"])
+    for r in standings:
+        hist = {h["event"]: h for h in client.entry_history(r["entry"]).get("current", [])}
+        if gw in hist and hist[gw]["total_points"] != r["total"]:
+            return False, f"classic league table not updated yet ({r['player_name']})"
+    for lg in config.get("h2h_leagues", []):
+        played = [m for m in client.h2h_matches(lg["id"]) if m.get("event") == gw]
+        if not played or all(not m.get("entry_1_points") and not m.get("entry_2_points") for m in played):
+            return False, f"{lg.get('label', 'H2H')} results not updated yet"
+    flag = status.get("leagues") or "pending"
+    return True, f"our league tables are updated (FPL's global flag says {flag!r})"
 
 
 def build(args):
