@@ -31,7 +31,8 @@ def shape(value, depth=0, max_depth=4):
 for url in sys.argv[1:]:
     raw = url.endswith("#raw")      # add #raw to print the full response (trimmed)
     events = url.endswith("#events")  # bootstrap-static: one line per gameweek's status flags
-    url = url.removesuffix("#raw").removesuffix("#events")
+    fixtures = url.endswith("#fixtures")  # fixtures/?event=N: one line per match
+    url = url.removesuffix("#raw").removesuffix("#events").removesuffix("#fixtures")
     print("=" * 100)
     print(url)
     try:
@@ -41,6 +42,12 @@ for url in sys.argv[1:]:
         print("HTTP 200")
         try:
             data = json.loads(body)
+            if fixtures:
+                for f in data:
+                    print({k: f.get(k) for k in ("id", "kickoff_time", "started", "finished",
+                                                 "finished_provisional", "team_h", "team_a",
+                                                 "team_h_score", "team_a_score")})
+                continue
             if events:
                 for e in data.get("events", []):
                     if e.get("finished") or e.get("is_current") or e.get("is_next"):
