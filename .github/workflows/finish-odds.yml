@@ -1,0 +1,31 @@
+name: Finishing odds (ad hoc)
+
+on:
+  workflow_dispatch:
+    inputs:
+      name:
+        description: "Manager's first name"
+        required: true
+      position:
+        description: "Finishing position (e.g. 2)"
+        required: true
+        default: "2"
+      sims:
+        description: "Number of simulated seasons"
+        required: false
+        default: "10000"
+
+jobs:
+  odds:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Simulate
+        env:
+          NAME: ${{ inputs.name }}
+          POSITION: ${{ inputs.position }}
+          SIMS: ${{ inputs.sims }}
+        run: python scripts/finish_odds.py --name "$NAME" --position "$POSITION" --sims "$SIMS"
