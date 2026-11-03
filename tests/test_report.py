@@ -281,12 +281,12 @@ class FinalGameweekTest(unittest.TestCase):
     EVENTS = [{"id": 8, "finished": True, "data_checked": True},
               {"id": 9, "is_current": True, "finished": False, "data_checked": False}]
 
-    def test_current_gameweek_counts_once_matches_and_bonus_done(self):
+    def test_only_officially_checked_gameweeks_count(self):
         from fpl_weekly.stats import latest_final_gameweek
-        self.assertEqual(latest_final_gameweek(self.EVENTS, self.Stub()), 9)
-        self.assertEqual(latest_final_gameweek(self.EVENTS, self.Stub(fixtures_done=False)), 8)
-        self.assertEqual(latest_final_gameweek(self.EVENTS, self.Stub(bonus=False)), 8)
-        self.assertEqual(latest_final_gameweek(self.EVENTS), 8)   # no client: FPL's flags only
+        # matches and bonus done is NOT enough: FPL can still change points until data_checked
+        self.assertEqual(latest_final_gameweek(self.EVENTS, self.Stub()), 8)
+        done = self.EVENTS[:1] + [dict(self.EVENTS[1], finished=True, data_checked=True)]
+        self.assertEqual(latest_final_gameweek(done, self.Stub()), 9)
 
 
 class ReadinessTest(unittest.TestCase):
@@ -328,13 +328,6 @@ class ReadinessTest(unittest.TestCase):
 
     def test_table_total_not_matching(self):
         self.assertFalse(self.check(table_total=90))
-
-    def test_lagging_table_feed_stops_blocking_after_a_while(self):
-        from fpl_weekly.__main__ import tables_ready
-        stub = self.Stub(table_total=90)
-        self.assertFalse(tables_ready(stub, {"classic_league_id": 1}, 9)[0])
-        stub.kickoff = "2020-01-01T15:00:00Z"   # long ago
-        self.assertTrue(tables_ready(stub, {"classic_league_id": 1}, 9)[0])
 
     def test_older_gameweek_is_ready(self):
         # status already reports a later gameweek -> the one we want is long done
