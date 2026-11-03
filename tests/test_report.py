@@ -303,6 +303,11 @@ class ReadinessTest(unittest.TestCase):
         def h2h_matches(self, league_id):
             return [{"event": 9, "entry_1_points": 50, "entry_2_points": 40}]
 
+        kickoff = "2099-01-01T15:00:00Z"   # far future = "just played"
+
+        def fixtures(self, gw):
+            return [{"kickoff_time": self.kickoff, "finished": True}]
+
         def entry_history(self, entry):
             return {"current": [{"event": 9, "total_points": 100}]}
 
@@ -323,6 +328,13 @@ class ReadinessTest(unittest.TestCase):
 
     def test_table_total_not_matching(self):
         self.assertFalse(self.check(table_total=90))
+
+    def test_lagging_table_feed_stops_blocking_after_a_while(self):
+        from fpl_weekly.__main__ import tables_ready
+        stub = self.Stub(table_total=90)
+        self.assertFalse(tables_ready(stub, {"classic_league_id": 1}, 9)[0])
+        stub.kickoff = "2020-01-01T15:00:00Z"   # long ago
+        self.assertTrue(tables_ready(stub, {"classic_league_id": 1}, 9)[0])
 
     def test_older_gameweek_is_ready(self):
         # status already reports a later gameweek -> the one we want is long done

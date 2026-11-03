@@ -23,9 +23,12 @@ numbers" stats, and up to five short notes. Past gameweek data used by "What
 if?" is saved in `state/cache/` so each run fetches less.
 
 **When it posts:** GitHub checks every hour. It posts once per gameweek, at the
-first check after the gameweek is finished, bonus points are added **and** our
-league tables show the final points. (GitHub sometimes skips scheduled runs; if a
-post is late, run the workflow by hand with mode = `post`.)
+first check after all the gameweek's matches are finished, bonus points are added
+**and** our league tables show the final points. If FPL's league-table feed is
+still lagging 14 hours after the last kick-off, it posts anyway (the report's
+numbers come from each manager's own history, which is final by then).
+GitHub sometimes skips scheduled runs; if a post is late, run the workflow by
+hand with mode = `post`.
 
 ---
 

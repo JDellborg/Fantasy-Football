@@ -40,6 +40,21 @@ def set_output(**values):
                 f.write(f"{k}={v}\n")
 
 
+MAX_WAIT_HOURS = 14
+
+
+def _hours_since_last_kickoff(client, gw):
+    from datetime import datetime, timezone
+    try:
+        kickoffs = [f["kickoff_time"] for f in client.fixtures(gw) if f.get("kickoff_time")]
+    except Exception:
+        return None
+    if not kickoffs:
+        return None
+    last = max(datetime.fromisoformat(k.replace("Z", "+00:00")) for k in kickoffs)
+    return (datetime.now(timezone.utc) - last).total_seconds() / 3600
+
+
 def tables_ready(client, config, gw):
     """True once OUR league tables show this gameweek's final points.
 
@@ -55,6 +70,12 @@ def tables_ready(client, config, gw):
         return True, "league tables updated"
     if not all(r.get("bonus_added") for r in rows):
         return False, "bonus points not added yet"
+    # Safety net: FPL's league-table feed can lag the website by many hours. The report's numbers
+    # come from each manager's own history (already final), so don't wait more than
+    # MAX_WAIT_HOURS after the gameweek's last kick-off.
+    waited = _hours_since_last_kickoff(client, gw)
+    if waited is not None and waited >= MAX_WAIT_HOURS:
+        return True, f"posting anyway: {waited:.0f} hours since the last match kicked off"
     _league, standings = client.classic_standings(config["classic_league_id"])
     for r in standings:
         hist = {h["event"]: h for h in client.entry_history(r["entry"]).get("current", [])}
