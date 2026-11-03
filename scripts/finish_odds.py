@@ -54,13 +54,15 @@ def main():
     ap.add_argument("--name", required=True)
     ap.add_argument("--position", type=int, default=2)
     ap.add_argument("--sims", type=int, default=10000)
+    ap.add_argument("--gameweek", type=int, default=None,
+                    help="last completed gameweek (default: latest one FPL has officially checked)")
     args = ap.parse_args()
     cfg = json.loads((ROOT / "config.json").read_text())
     who = args.name.lower()
     rng = random.Random(42)
 
     fpl = FPLClient()
-    gw = latest_final_gameweek(fpl.bootstrap()["events"], fpl)
+    gw = args.gameweek or latest_final_gameweek(fpl.bootstrap()["events"], fpl)
     left = list(range(gw + 1, LAST_GW + 1))
     print(f"Simulating gameweeks {left[0]}-{left[-1]} ({len(left)} left), {args.sims:,} seasons, "
           f"target: {args.name} finishing position {args.position}\n")
