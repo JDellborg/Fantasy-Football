@@ -30,7 +30,8 @@ def shape(value, depth=0, max_depth=4):
 
 for url in sys.argv[1:]:
     raw = url.endswith("#raw")      # add #raw to print the full response (trimmed)
-    url = url.removesuffix("#raw")
+    events = url.endswith("#events")  # bootstrap-static: one line per gameweek's status flags
+    url = url.removesuffix("#raw").removesuffix("#events")
     print("=" * 100)
     print(url)
     try:
@@ -39,7 +40,14 @@ for url in sys.argv[1:]:
             body = r.read().decode("utf-8", "replace")
         print("HTTP 200")
         try:
-            print(json.dumps(json.loads(body), indent=1)[:12000] if raw else shape(json.loads(body)))
+            data = json.loads(body)
+            if events:
+                for e in data.get("events", []):
+                    if e.get("finished") or e.get("is_current") or e.get("is_next"):
+                        print({k: e.get(k) for k in ("id", "is_previous", "is_current", "is_next", "finished",
+                                                     "data_checked", "average_entry_score", "deadline_time")})
+                continue
+            print(json.dumps(data, indent=1)[:12000] if raw else shape(data))
         except json.JSONDecodeError:
             print("NOT JSON:", body[:300])
     except urllib.error.HTTPError as e:
