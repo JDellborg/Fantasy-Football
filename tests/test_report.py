@@ -267,6 +267,28 @@ class InsightsTest(unittest.TestCase):
         self.assertTrue(report.card_insight)
 
 
+class FinalGameweekTest(unittest.TestCase):
+    class Stub:
+        def __init__(self, fixtures_done=True, bonus=True):
+            self.fixtures_done, self.bonus = fixtures_done, bonus
+
+        def fixtures(self, gw):
+            return [{"finished": True}, {"finished": self.fixtures_done}]
+
+        def event_status(self):
+            return {"status": [{"event": 9, "bonus_added": self.bonus}], "leagues": "Updating"}
+
+    EVENTS = [{"id": 8, "finished": True, "data_checked": True},
+              {"id": 9, "is_current": True, "finished": False, "data_checked": False}]
+
+    def test_current_gameweek_counts_once_matches_and_bonus_done(self):
+        from fpl_weekly.stats import latest_final_gameweek
+        self.assertEqual(latest_final_gameweek(self.EVENTS, self.Stub()), 9)
+        self.assertEqual(latest_final_gameweek(self.EVENTS, self.Stub(fixtures_done=False)), 8)
+        self.assertEqual(latest_final_gameweek(self.EVENTS, self.Stub(bonus=False)), 8)
+        self.assertEqual(latest_final_gameweek(self.EVENTS), 8)   # no client: FPL's flags only
+
+
 class ReadinessTest(unittest.TestCase):
     class Stub:
         def __init__(self, leagues="Updated", bonus=True, table_total=100, gw=9):

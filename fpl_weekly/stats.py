@@ -84,9 +84,30 @@ class Story:
 
 # --- small helpers ---------------------------------------------------------
 
-def latest_final_gameweek(events):
+def latest_final_gameweek(events, client=None):
+    """The latest gameweek whose points are final.
+
+    FPL only ticks 'finished'/'data_checked' once it has updated every league worldwide,
+    which can take a day. So the current gameweek also counts as final once all its matches
+    are finished and bonus points are added for every day (checked with `client`)."""
     done = [e["id"] for e in events if e.get("finished") and e.get("data_checked")]
-    return max(done) if done else None
+    latest = max(done) if done else None
+    if client is not None:
+        current = next((e for e in events if e.get("is_current") and not e.get("data_checked")), None)
+        if current and current_gameweek_complete(client, current["id"]):
+            latest = max(latest or 0, current["id"])
+    return latest
+
+
+def current_gameweek_complete(client, gw):
+    """All of the gameweek's matches finished and bonus points added for every match day."""
+    try:
+        fixtures = client.fixtures(gw)
+        status = [r for r in client.event_status().get("status", []) if r.get("event") == gw]
+    except Exception:  # if FPL doesn't answer, fall back to FPL's own flags
+        return False
+    return (bool(fixtures) and all(f.get("finished") for f in fixtures)
+            and bool(status) and all(r.get("bonus_added") for r in status))
 
 
 def join_names(names):
@@ -155,7 +176,7 @@ class ReportBuilder:
         self.extra_clients = extra_clients or {}
         boot = client.bootstrap()
         self.events = {e["id"]: e for e in boot["events"]}
-        self.gw = gameweek or latest_final_gameweek(boot["events"])
+        self.gw = gameweek or latest_final_gameweek(boot["events"], client)
         if not self.gw:
             raise SystemExit("No finished gameweek yet - nothing to report.")
         self.players = {p["id"]: p for p in boot["elements"]}

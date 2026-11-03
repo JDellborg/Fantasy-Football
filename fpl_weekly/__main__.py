@@ -73,7 +73,7 @@ def build(args):
     client = FPLClient()
 
     if args.only_if_new and not args.gameweek:
-        latest = latest_final_gameweek(client.bootstrap()["events"])
+        latest = latest_final_gameweek(client.bootstrap()["events"], client)
         if not latest or latest <= last_posted():
             print(f"No new finished gameweek (latest final: {latest}, last posted: {last_posted()}).")
             set_output(publish="false")
@@ -86,6 +86,11 @@ def build(args):
         print(f"Gameweek {latest}: {reason}.")
 
     report = build_report(client, config, args.gameweek, cache_dir=ROOT / "state" / "cache")
+    try:
+        ready, reason = tables_ready(client, config, report.gameweek)
+        print(f"Gameweek {report.gameweek} readiness: {'READY' if ready else 'NOT READY'} - {reason}")
+    except Exception as e:  # informational only
+        print(f"Readiness check skipped: {e}")
     page = write_site(report, SITE, config.get("accent_color", "#ff6b1a"))
     link = None
     if config.get("site_url"):

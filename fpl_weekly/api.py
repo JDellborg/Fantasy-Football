@@ -51,6 +51,9 @@ class FPLClient:
     def event_status(self):
         return self.get("/event-status/")
 
+    def fixtures(self, gw):
+        return self.get(f"/fixtures/?event={gw}")
+
     def live(self, gw):
         return self.get(f"/event/{gw}/live/")
 
